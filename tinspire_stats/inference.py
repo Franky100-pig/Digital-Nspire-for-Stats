@@ -12,14 +12,15 @@ list-shaped argument is a list.  ``tInterval([1,2,3], None, 0.9)`` is Data;
 Name fidelity
 -------------
 Output names come from each function's own table in the TI-Nspire Reference
-Guide.  Where two editions of the guide disagree the module publishes **both**
-spellings and records the pair in ``NAME_SUPERSETS`` below, so
-``stat.σx`` *and* ``stat.sx`` both answer after ``tInterval`` no matter which
-edition you are reading.  See ``README.md`` for the full fidelity table.
+Guide, name for name and position for position -- the whole ordered list is
+pinned in ``_refguide`` and asserted by ``tests/test_statresults.py``.  Where
+sibling procedures disagree with each other, the disagreement is kept: those
+four ``sx``/``σx`` combinations in the table below are the guide's, not a
+typo.  See ``README.md`` for the full fidelity table.
 
     >>> from tinspire_stats import zInterval, stat
     >>> zInterval(2, [3, 4, 5, 6, 7], None, 0.95)
-    StatGroup(CLower, CUpper, x, ME, sx, n, σ, σx)
+    StatGroup(CLower, CUpper, x, ME, sx, n, σ)
     >>> round(stat.CLower, 4), round(stat.CUpper, 4)
     (3.247, 6.753)
 """
@@ -59,34 +60,29 @@ from .distributions import (
 from .statvar import publish
 
 # --------------------------------------------------------------------------
-# Name supersets: the reference guide prints these names two ways.
+# Sibling procedures do not agree on their names, and that is the interface
 # --------------------------------------------------------------------------
-#: ``{canonical emitted name: [alternate spelling also emitted]}``.
-#: Driven by: (a) the *printed* Reference Guide being older than the online one,
-#: and (b) the online guide's tInterval table saying ``σx`` where its own
-#: description says "sample standard deviation".
-NAME_SUPERSETS = {
-    "sx": ["σx"],
-    "sx1": ["σx1"],
-    "sx2": ["σx2"],
-    "v": ["x"],
-    "v1": ["x1"],
-    "v2": ["x2"],
-}
-
-
-def _supersede(d: dict) -> dict:
-    """Add the alternate spellings listed in ``NAME_SUPERSETS``."""
-    extra = {}
-    for key, alts in NAME_SUPERSETS.items():
-        if key in d:
-            for alt in alts:
-                extra.setdefault(alt, d[key])
-    # the alternate of v1-v2 rides along with v1/v2
-    if "v1" in d and "v2" in d:
-        extra.setdefault("x1-x2", d["v1"] - d["v2"])
-    d.update(extra)
-    return d
+# There is deliberately no alias table here.  An earlier revision published
+# several procedures' names twice -- ``stat.sx`` *and* ``stat.σx`` after
+# ``tInterval``, ``stat.v`` *and* ``stat.x`` after ``tTest`` -- on the theory
+# that the printed and online editions of the guide disagreed.  They do not:
+# the online guide is written inconsistently, and the inconsistency is real
+# and must be preserved, because ``stat.results`` on the device lists exactly
+# one name per quantity and a program written against the device reads that
+# name.
+#
+#   procedure            sample standard deviation of ...
+#   zInterval            stat.sx          (and stat.σ, the known pop. σ)
+#   zTest                stat.sx          (Data input only)
+#   tInterval            stat.σx
+#   tTest                stat.sx
+#   tInterval_2Samp      stat.σx1, stat.σx2
+#   tTest_2Samp          stat.sx1, stat.sx2
+#
+# The z procedures put the sample mean in ``stat.x``; the t procedures put it
+# in ``stat.v``.  Both of those are the guide's doing.  See the note in
+# ``_refguide`` for the evidence, including why ``stat.σ`` at ``zInterval`` is
+# not a truncated ``stat.σx``.
 
 
 # --------------------------------------------------------------------------
@@ -172,9 +168,11 @@ def zInterval(σ, *args, **kwargs):
     """``zInterval σ,List[,Freq[,CLevel]]`` / ``zInterval σ,v,n[,CLevel]``.
 
     Publishes ``stat.CLower``/``stat.CUpper``, ``stat.x``, ``stat.ME``,
-    ``stat.sx``, ``stat.n`` and ``stat.σ``.  Note that the z procedures park the
-    sample mean in ``stat.x`` while the t procedures use ``stat.v`` -- that is
-    the guide's doing, not a slip.
+    ``stat.sx``, ``stat.n`` and ``stat.σ`` -- the last being the known
+    population standard deviation the caller passed in, echoed back.  Note that
+    the z procedures park the sample mean in ``stat.x`` while the t procedures
+    use ``stat.v``, and that this one says ``stat.sx`` where ``tInterval`` says
+    ``stat.σx``; see the name table at the top of this module.
     """
     clev = _float(kwargs.pop("CLevel", 0.95))
     sigma = _number(σ)
@@ -194,17 +192,15 @@ def zInterval(σ, *args, **kwargs):
         if _len(args) > 3:
             clev = _float(args[3])
     me = _crit_z(clev) * sigma / sqrt(n)
-    return publish(
-        _supersede({
-            "CLower": mean - me,
-            "CUpper": mean + me,
-            "x": mean,
-            "ME": me,
-            "sx": sx,
-            "n": _stat_int(n),
-            "σ": sigma,
-        })
-    )
+    return publish({
+        "CLower": mean - me,
+        "CUpper": mean + me,
+        "x": mean,
+        "ME": me,
+        "sx": sx,
+        "n": _stat_int(n),
+        "σ": sigma,
+    })
 
 
 def zInterval_2Samp(σ1, σ2, *args, **kwargs):
@@ -233,22 +229,20 @@ def zInterval_2Samp(σ1, σ2, *args, **kwargs):
     se = sqrt(s1 * s1 / n1 + s2 * s2 / n2)
     diff = v1 - v2
     me = _crit_z(clev) * se
-    return publish(
-        _supersede({
-            "CLower": diff - me,
-            "CUpper": diff + me,
-            "x1-x2": diff,
-            "ME": me,
-            "x1": v1,
-            "x2": v2,
-            "σx1": s1,
-            "σx2": s2,
-            "n1": _stat_int(n1),
-            "n2": _stat_int(n2),
-            "r1": s1,
-            "r2": s2,
-        })
-    )
+    return publish({
+        "CLower": diff - me,
+        "CUpper": diff + me,
+        "x1-x2": diff,
+        "ME": me,
+        "x1": v1,
+        "x2": v2,
+        "σx1": s1,
+        "σx2": s2,
+        "n1": _stat_int(n1),
+        "n2": _stat_int(n2),
+        "r1": s1,
+        "r2": s2,
+    })
 
 
 def zInterval_1Prop(x, n, CLevel=0.95):
@@ -265,7 +259,7 @@ def zInterval_1Prop(x, n, CLevel=0.95):
     return publish({
         "CLower": p - me,
         "CUpper": p + me,
-        "Ç": p,
+        "p̂": p,
         "ME": me,
         "n": _stat_int(N),
     })
@@ -281,10 +275,10 @@ def zInterval_2Prop(x1, n1, x2, n2, CLevel=0.95):
     return publish({
         "CLower": (p1 - p2) - me,
         "CUpper": (p1 - p2) + me,
-        "ÇDiff": p1 - p2,
+        "p̂Diff": p1 - p2,
         "ME": me,
-        "Ç1": p1,
-        "Ç2": p2,
+        "p̂1": p1,
+        "p̂2": p2,
         "n1": _stat_int(N1),
         "n2": _stat_int(N2),
     })
@@ -296,9 +290,9 @@ def zInterval_2Prop(x1, n1, x2, n2, CLevel=0.95):
 def tInterval(*args, **kwargs):
     """``tInterval List[,Freq[,CLevel]]`` / ``tInterval v,sx,n[,CLevel]``.
 
-    Publishes ``stat.CLower``/``stat.CUpper``, ``stat.v``, ``stat.ME``,
-    ``stat.df``, ``stat.sx``, ``stat.n``.  ``stat.σx`` answers as well -- the
-    online guide's tInterval table prints it.
+    The *argument* is called ``sx`` in the syntax line, but the *result* is
+    ``stat.σx`` -- the guide's tInterval table says so, and it publishes no
+    ``stat.sx``.  ``stat.v`` is the sample mean.
     """
     clev = _float(kwargs.pop("CLevel", 0.95))
     if not args:
@@ -319,17 +313,15 @@ def tInterval(*args, **kwargs):
     if df <= 0:
         raise DomainError("need at least two observations")
     me = _crit_t(clev, df) * sx / sqrt(n)
-    return publish(
-        _supersede({
-            "CLower": mean - me,
-            "CUpper": mean + me,
-            "v": mean,
-            "ME": me,
-            "df": _stat_int(df),
-            "sx": sx,
-            "n": _stat_int(n),
-        })
-    )
+    return publish({
+        "CLower": mean - me,
+        "CUpper": mean + me,
+        "v": mean,
+        "ME": me,
+        "df": _stat_int(df),
+        "σx": sx,
+        "n": _stat_int(n),
+    })
 
 
 def tInterval_2Samp(*args, **kwargs):
@@ -337,7 +329,10 @@ def tInterval_2Samp(*args, **kwargs):
 
     Stats form: ``tInterval_2Samp v1,sx1,n1,v2,sx2,n2[,CLevel[,Pooled]]``.
     ``Pooled=1`` pools the variances, ``Pooled=0`` (default) is Welch.
-    ``stat.sp`` is published only when pooled, exactly as the guide says.
+    ``stat.sp`` is published only when pooled, exactly as the guide says -- so
+    the non-pooled run does not define the name at all.  The standard
+    deviations come back as ``stat.σx1``/``stat.σx2`` here, unlike
+    ``tTest_2Samp``, which says ``stat.sx1``/``stat.sx2``.
     """
     clev = _float(kwargs.pop("CLevel", 0.95))
     pooled = kwargs.pop("Pooled", None)
@@ -381,14 +376,14 @@ def tInterval_2Samp(*args, **kwargs):
         "df": _stat_int(df),
         "v1": v1,
         "v2": v2,
-        "sx1": sx1,
-        "sx2": sx2,
+        "σx1": sx1,
+        "σx2": sx2,
         "n1": _stat_int(n1),
         "n2": _stat_int(n2),
     }
     if is_pooled:
         out["sp"] = sp
-    return publish(_supersede(out))
+    return publish(out)
 
 
 # ==========================================================================
@@ -397,8 +392,10 @@ def tInterval_2Samp(*args, **kwargs):
 def zTest(μ0, σ, *args, **kwargs):
     """``zTest μ0,σ,List[,Freq[,Hypoth]]`` / ``zTest μ0,σ,v,n[,Hypoth]``.
 
-    Publishes ``stat.z``, ``stat.PVal``, ``stat.x``, ``stat.sx`` (Data input
-    only) and ``stat.n``.
+    Publishes ``stat.z``, ``stat.PVal``, ``stat.x``, ``stat.sx`` and ``stat.n``.
+    The guide qualifies ``stat.sx`` with "Only returned for Data input", so a
+    summary-statistics run leaves it undefined rather than reporting a
+    placeholder.
     """
     hypoth = kwargs.pop("Hypoth", 0)
     mu0, sigma = _number(μ0), _number(σ)
@@ -418,14 +415,16 @@ def zTest(μ0, σ, *args, **kwargs):
             hypoth = args[2]
         sx, have_sx = None, False
     z = (mean - mu0) / (sigma / sqrt(n))
+    # stat.sx sits between stat.x and stat.n, where the guide puts it, and only
+    # a Data run defines it.
     out = {
         "z": z,
         "PVal": _tail_p(_z_left, z, hypoth),
         "x": mean,
-        "n": _stat_int(n),
     }
     if have_sx:
         out["sx"] = sx
+    out["n"] = _stat_int(n)
     return publish(out)
 
 
@@ -468,7 +467,7 @@ def zTest_2Samp(σ1, σ2, *args, **kwargs):
 def zTest_1Prop(p0, x, n, Hypoth=0):
     """``zTest_1Prop p0,x,n[,Hypoth]`` -- one-proportion z test.
 
-    Publishes ``stat.p0``, ``stat.z``, ``stat.PVal``, ``stat.Ç`` and ``stat.n``.
+    Publishes ``stat.p0``, ``stat.z``, ``stat.PVal``, ``stat.p̂`` and ``stat.n``.
     """
     p_0, k, N = _number(p0), _number(x), _number(n)
     if not 0 < p_0 < 1:
@@ -481,7 +480,7 @@ def zTest_1Prop(p0, x, n, Hypoth=0):
         "p0": p_0,
         "z": z,
         "PVal": _tail_p(_z_left, z, Hypoth),
-        "Ç": phat,
+        "p̂": phat,
         "n": _stat_int(N),
     })
 
@@ -489,7 +488,7 @@ def zTest_1Prop(p0, x, n, Hypoth=0):
 def zTest_2Prop(x1, n1, x2, n2, Hypoth=0):
     """``zTest_2Prop x1,n1,x2,n2[,Hypoth]`` -- two-proportion z test.
 
-    Uses the pooled proportion ``stat.Ç`` in the standard error, as TI does.
+    Uses the pooled proportion ``stat.p̂`` in the standard error, as TI does.
     """
     k1, N1, k2, N2 = (_number(v) for v in (x1, n1, x2, n2))
     if not (0 <= k1 <= N1 and 0 <= k2 <= N2 and N1 > 0 and N2 > 0):
@@ -500,9 +499,9 @@ def zTest_2Prop(x1, n1, x2, n2, Hypoth=0):
     return publish({
         "z": z,
         "PVal": _tail_p(_z_left, z, Hypoth),
-        "Ç1": p1,
-        "Ç2": p2,
-        "Ç": pbar,
+        "p̂1": p1,
+        "p̂2": p2,
+        "p̂": pbar,
         "n1": _stat_int(N1),
         "n2": _stat_int(N2),
     })
@@ -515,8 +514,8 @@ def tTest(μ0, *args, **kwargs):
     """``tTest μ0,List[,Freq[,Hypoth]]`` / ``tTest μ0,v,sx,n[,Hypoth]``.
 
     Publishes ``stat.t``, ``stat.PVal``, ``stat.df``, ``stat.v``, ``stat.sx``,
-    ``stat.n``.  The printed Reference Guide calls the sample mean ``stat.x``;
-    both spellings are published (``NAME_SUPERSETS``).
+    ``stat.n``.  Here the result *is* ``stat.sx`` and the mean is ``stat.v`` --
+    the mirror image of ``tInterval``, which says ``stat.σx``.
     """
     hypoth = kwargs.pop("Hypoth", 0)
     mu0 = _number(μ0)
@@ -538,16 +537,14 @@ def tTest(μ0, *args, **kwargs):
     if df <= 0:
         raise DomainError("need at least two observations")
     t = (mean - mu0) / (sx / sqrt(n))
-    return publish(
-        _supersede({
-            "t": t,
-            "PVal": _tail_p(lambda v: _t_left(v, df), t, hypoth),
-            "df": _stat_int(df),
-            "v": mean,
-            "sx": sx,
-            "n": _stat_int(n),
-        })
-    )
+    return publish({
+        "t": t,
+        "PVal": _tail_p(lambda v: _t_left(v, df), t, hypoth),
+        "df": _stat_int(df),
+        "v": mean,
+        "sx": sx,
+        "n": _stat_int(n),
+    })
 
 
 def tTest_2Samp(*args, **kwargs):
@@ -556,7 +553,9 @@ def tTest_2Samp(*args, **kwargs):
     Stats form: ``tTest_2Samp v1,sx1,n1,v2,sx2,n2[,Hypoth[,Pooled]]``.
     ``Pooled=1`` uses the pooled-variance t; ``Pooled=0`` (default) uses Welch,
     which is why ``stat.df`` is usually fractional -- the handheld shows the
-    fractional df too.
+    fractional df too.  ``stat.sp`` appears only when pooled.  Note the
+    ``stat.sx1``/``stat.sx2`` spelling, where ``tInterval_2Samp`` says
+    ``stat.σx1``/``stat.σx2``.
     """
     hypoth = kwargs.pop("Hypoth", 0)
     pooled = kwargs.pop("Pooled", None)
@@ -603,7 +602,7 @@ def tTest_2Samp(*args, **kwargs):
     }
     if is_pooled:
         out["sp"] = sp
-    return publish(_supersede(out))
+    return publish(out)
 
 
 # ==========================================================================
@@ -902,9 +901,13 @@ def ANOVA2way(*args, **kwargs):
     ms_int = ss_int / df_int if df_int else float("nan")
     ms_err = ss_err / df_err
 
-    out = {"dfError": df_err, "SSError": ss_err, "MSError": ms_err, "s": sqrt(ms_err)}
+    # The error block closes the listing in both designs: the guide titles the
+    # Block table and then the COLUMN FACTOR / ROW FACTOR / INTERACTION / ERROR
+    # tables of the two-factor design, and ERROR is last in that run.
+    err = {"dfError": df_err, "SSError": ss_err, "MSError": ms_err,
+           "s": sqrt(ms_err)}
     if lr == 0:
-        out.update({
+        out = {
             "F": ms_col / ms_err,
             "PVal": 1.0 - FCdf(0, ms_col / ms_err, df_col, df_err),
             "df": df_col,
@@ -915,10 +918,10 @@ def ANOVA2way(*args, **kwargs):
             "dfBlock": df_row,
             "SSBlock": ss_row,
             "MSBlock": ms_row,
-        })
+        }
     else:
         f_col, f_row, f_int = ms_col / ms_err, ms_row / ms_err, ms_int / ms_err
-        out.update({
+        out = {
             "Fcol": f_col,
             "PValCol": 1.0 - FCdf(0, f_col, df_col, df_err),
             "dfCol": df_col,
@@ -934,7 +937,8 @@ def ANOVA2way(*args, **kwargs):
             "dfInteract": df_int,
             "SSInteract": ss_int,
             "MSInteract": ms_int,
-        })
+        }
+    out.update(err)
     return publish(out)
 
 # ==========================================================================

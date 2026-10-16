@@ -207,7 +207,7 @@ def TwoVar(*args, **kwargs):
     """``TwoVar X,Y[,[Freq][,Category,Include]]``.
 
     Publishes both one-variable tables plus ``stat.Σxy``, the correlation
-    ``stat.r`` and the deviation sums ``stat.Σ(x-v)2`` / ``stat.Σ(y-w)2``.
+    ``stat.r`` and the deviation sums ``stat.Σ(x-v)²`` / ``stat.Σ(y-w)²``.
     ``stat.MedianY`` is also reachable under the guide's alternate spelling
     ``stat.MedY``.
     """
@@ -262,30 +262,40 @@ def _twovar_core(x, y, freq=None, index=None):
     if isnan(r) and sxx == 0 and syy == 0:
         r = 0.0
 
+    # The order is part of the interface: the handheld's stat.results screen
+    # scrolls in *this* order, so the guide's table is reproduced positionally
+    # rather than assembled out of _onevar_core's own order.  Note that TwoVar
+    # publishes stat.Σxy and stat.r between the two five-number blocks, and the
+    # two sums of squared deviations last of all -- and that neither block
+    # carries stat.SSX or its own stat.n.
     sfx = _str(index) if index else ""
-    out = {}
-    for k, v in one_x.items():
-        # TwoVar's own table lists neither stat.SSX nor stat.n per list; the
-        # deviations it does show come back as stat.Σ(x-v)2 below.
-        if k in ("n", "SSX"):
-            continue
-        out[(k + sfx) if k != "v" else ("v" + sfx)] = v
-    out["Σxy" + sfx] = sum_xy
-    out["Σ(x-v)2" + sfx] = one_x["SSX"]
-    out["w" + sfx] = one_y["v"]
-    out["Σy" + sfx] = one_y["Σx"]
-    out["Σy²" + sfx] = one_y["Σx²"]
-    out["sy" + sfx] = one_y["sx"]
-    out["σy" + sfx] = one_y["σx"]
-    out["Σ(y-w)2" + sfx] = one_y["SSX"]
-    out["MinY" + sfx] = one_y["MinX"]
-    out["Q1Y" + sfx] = one_y["Q1X"]
-    out["MedianY" + sfx] = one_y["MedianX"]
-    out["Q3Y" + sfx] = one_y["Q3X"]
-    out["MaxY" + sfx] = one_y["MaxX"]
-    out["r" + sfx] = r
-    out["n" + sfx] = _int(n) if n == _int(n) else n
-    return out
+    return {
+        "v" + sfx: mx,
+        "Σx" + sfx: one_x["Σx"],
+        "Σx²" + sfx: one_x["Σx²"],
+        "sx" + sfx: one_x["sx"],
+        "σx" + sfx: one_x["σx"],
+        "n" + sfx: _int(n) if n == _int(n) else n,
+        "w" + sfx: my,
+        "Σy" + sfx: one_y["Σx"],
+        "Σy²" + sfx: one_y["Σx²"],
+        "sy" + sfx: one_y["sx"],
+        "σy" + sfx: one_y["σx"],
+        "Σxy" + sfx: sum_xy,
+        "r" + sfx: r,
+        "MinX" + sfx: one_x["MinX"],
+        "Q1X" + sfx: one_x["Q1X"],
+        "MedianX" + sfx: one_x["MedianX"],
+        "Q3X" + sfx: one_x["Q3X"],
+        "MaxX" + sfx: one_x["MaxX"],
+        "MinY" + sfx: one_y["MinX"],
+        "Q1Y" + sfx: one_y["Q1X"],
+        "MedianY" + sfx: one_y["MedianX"],
+        "Q3Y" + sfx: one_y["Q3X"],
+        "MaxY" + sfx: one_y["MaxX"],
+        "Σ(x-v)²" + sfx: one_x["SSX"],
+        "Σ(y-w)²" + sfx: one_y["SSX"],
+    }
 
 
 # --------------------------------------------------------------------------

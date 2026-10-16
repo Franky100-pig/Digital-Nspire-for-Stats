@@ -92,13 +92,18 @@ def _common(px, py, w):
     return n, mx, my
 
 
-def _finish(d, resid, px, py, w):
+def _finish(d, resid, px, py, w, after_resid=None):
     """Attach the tail every regression publishes.
 
-    ``stat.Resid`` always; ``stat.XReg``/``stat.YReg``/``stat.FreqReg`` only for
-    the curve fits -- the guide does not list them for ``MultReg`` and friends.
+    ``stat.Resid`` always; then ``after_resid``, if the model has further
+    residual-style outputs -- the transformed fits publish ``stat.ResidTrans``
+    directly *behind* ``stat.Resid``, not in front of it; then
+    ``stat.XReg``/``stat.YReg``/``stat.FreqReg`` for the curve fits -- the guide
+    does not list those for ``MultReg`` and friends.
     """
     d["Resid"] = _list(resid)
+    if after_resid:
+        d.update(after_resid)
     if px is not None:
         d["XReg"] = _list(px)
         d["YReg"] = _list(py)
@@ -181,12 +186,13 @@ def _poly(X, Y, degree, kind, names, symbolic, Freq, Category, Include):
     sst = _sum(wi * (b - my) ** 2 for b, wi in _zip(py, w))
     r2 = 1.0 - sse / sst if sst else 0.0
     coeffs = {names[j]: beta[j] for j in _range(degree + 1)}
-    d = {
-        "RegEqn": RegEqn(kind, coeffs, symbolic),
-        "R2": r2,
-        "r²": r2,
-    }
+    # The polynomial fits are the family that prints a capital stat.R², and it
+    # comes after the coefficients -- not in front of them, and with no
+    # lower-case twin.  (Verified against the guide's QuadReg, CubicReg and
+    # QuartReg tables; the capital/lower-case split is real, not a typo.)
+    d = {"RegEqn": RegEqn(kind, coeffs, symbolic)}
     d.update(coeffs)
+    d["R²"] = r2
     return publish(_finish(d, resid, px, py, w))
 
 
@@ -242,9 +248,9 @@ def LnReg(X, Y, Freq=None, Category=None, Include=None):
         "b": b,
         "r²": r * r,
         "r": r,
-        "ResidTrans": _list(resid),
     }
-    return publish(_finish(d, resid, px, py, w))
+    return publish(_finish(d, resid, px, py, w,
+                           after_resid={"ResidTrans": _list(resid)}))
 
 
 def ExpReg(X, Y, Freq=None, Category=None, Include=None):
@@ -274,9 +280,9 @@ def ExpReg(X, Y, Freq=None, Category=None, Include=None):
         "b": b,
         "r²": r * r,
         "r": r,
-        "ResidTrans": _list(res_t),
     }
-    return publish(_finish(d, resid, px, py, w))
+    return publish(_finish(d, resid, px, py, w,
+                           after_resid={"ResidTrans": _list(res_t)}))
 
 
 def PowerReg(X, Y, Freq=None, Category=None, Include=None):
@@ -310,9 +316,9 @@ def PowerReg(X, Y, Freq=None, Category=None, Include=None):
         "b": b,
         "r²": r * r,
         "r": r,
-        "ResidTrans": _list(res_t),
     }
-    return publish(_finish(d, resid, px, py, w))
+    return publish(_finish(d, resid, px, py, w,
+                           after_resid={"ResidTrans": _list(res_t)}))
 
 
 # --------------------------------------------------------------------------
@@ -668,22 +674,20 @@ def _multi_reg_eqn(beta):
 def MultReg(Y, *X, **kwargs):
     """``MultReg Y,X1[,X2,...,X10]`` -- y = b0+b1·x1+b2·x2+...
 
-    Publishes ``stat.b0``..``stat.b10``, ``stat.R2``, ``stat.yList`` (fitted
+    Publishes ``stat.b0``..``stat.b10``, ``stat.R²``, ``stat.yList`` (fitted
     values) and ``stat.Resid``.  The guide lists only those -- no ``*Reg`` echo
-    lists for the multiple models.
+    lists for the multiple models, and the coefficients are published bare here
+    (``stat.b0``), unlike ``MultRegTests``, which collects them into
+    ``stat.bList`` instead.
     """
     py = [v for v in _list(Y) if not is_void(v)]
     columns = [_list(c) for c in X]
     st = _ols_stats(py, columns)
     eqn, coeffs = _multi_reg_eqn(st["beta"])
-    d = {
-        "RegEqn": eqn,
-        "R2": st["r2"],
-        "r²": st["r2"],
-        "yList": st["fit"],
-        "bList": _list(st["beta"]),
-    }
+    d = {"RegEqn": eqn}
     d.update(coeffs)
+    d["R²"] = st["r2"]
+    d["yList"] = st["fit"]
     return publish(_finish(d, st["resid"], None, py, None))
 
 
@@ -697,12 +701,18 @@ def _durbin_watson(resid):
 def MultRegTests(Y, *X, **kwargs):
     """``MultRegTests Y,X1[,...,X10]`` -- global F test plus per-coefficient t tests.
 
-    The whole report: ``stat.F``, ``stat.PVal``, ``stat.R2``, ``stat.AdjR2``,
+    The whole report: ``stat.F``, ``stat.PVal``, ``stat.R²``, ``stat.AdjR²``,
     ``stat.s``, ``stat.DW`` (Durbin-Watson), the SS/MS/df ANOVA table,
     ``stat.bList``/``stat.tList``/``stat.PList``/``stat.SEList``, standardised
     residuals ``stat.sResid``, ``stat.CookDist`` and ``stat.Leverage``.
+
+    Note that the coefficients are published *as a list* (``stat.bList``) and
+    not as bare ``stat.b0``/``stat.b1``: unlike ``MultReg``, this procedure
+    never defines the individual names.  And ``stat.Resid`` sits in the middle
+    of the run, between ``stat.yList`` and ``stat.sResid``, so the report is
+    assembled here rather than through ``_finish``.
     """
-    from .distributions import Fcdf, tCdf
+    from .distributions import FCdf, tCdf
 
     py = [v for v in _list(Y) if not is_void(v)]
     columns = [_list(c) for c in X]
@@ -712,7 +722,7 @@ def MultRegTests(Y, *X, **kwargs):
     ssr = st["sst"] - st["sse"]
     msr = ssr / k
     f = msr / st["mse"] if st["mse"] else float("nan")
-    pval = 1.0 - Fcdf(0, f, k, df_err)
+    pval = 1.0 - FCdf(0, f, k, df_err)
     s = st["s"]
     sresid = [
         e / (s * sqrt(1 - h)) if s and 0 < h < 1 else float("nan")
@@ -730,13 +740,12 @@ def MultRegTests(Y, *X, **kwargs):
         2 * tCdf(-9e999, -_abs(t), df_err) if t == t else float("nan")
         for t in st["t"]
     ]
-    eqn, coeffs = _multi_reg_eqn(st["beta"])
-    d = {
+    eqn, _coeffs = _multi_reg_eqn(st["beta"])
+    return publish({
         "RegEqn": eqn,
         "F": f,
         "PVal": pval,
-        "R2": st["r2"],
-        "r²": st["r2"],
+        "R²": st["r2"],
         "AdjR²": st["adj_r2"],
         "s": s,
         "DW": _durbin_watson(st["resid"]),
@@ -751,12 +760,11 @@ def MultRegTests(Y, *X, **kwargs):
         "PList": plist,
         "SEList": _list(st["se"]),
         "yList": st["fit"],
+        "Resid": _list(st["resid"]),
         "sResid": sresid,
         "CookDist": cooks,
         "Leverage": _list(st["leverage"]),
-    }
-    d.update(coeffs)
-    return publish(_finish(d, st["resid"], None, py, None))
+    })
 
 
 def MultRegIntervals(Y, *args, CLevel=0.95):
@@ -800,11 +808,13 @@ def MultRegIntervals(Y, *args, CLevel=0.95):
     se = sqrt(st["mse"] * quad)
     sepred = sqrt(st["mse"] * (1 + quad))
     tcrit = invt(1 - (1 - CLevel) / 2, df_err)
-    eqn, coeffs = _multi_reg_eqn(st["beta"])
-    d = {
+    eqn, _coeffs = _multi_reg_eqn(st["beta"])
+    # The XValList is an *input*, not a result: the guide's table starts at
+    # stat.RegEqn and lists no such variable.  The coefficients likewise appear
+    # only as stat.bList here, never as bare stat.b0/stat.b1.
+    return publish({
         "RegEqn": eqn,
         "y": yhat,
-        "XValList": xval_list,
         "dfError": df_err,
         "CLower": yhat - tcrit * se,
         "CUpper": yhat + tcrit * se,
@@ -815,9 +825,8 @@ def MultRegIntervals(Y, *args, CLevel=0.95):
         "MEPred": tcrit * sepred,
         "SEPred": sepred,
         "bList": _list(st["beta"]),
-    }
-    d.update(coeffs)
-    return publish(_finish(d, st["resid"], None, py, None))
+        "Resid": _list(st["resid"]),
+    })
 
 
 # --------------------------------------------------------------------------
@@ -832,6 +841,14 @@ def LinRegtIntervals(X, Y, F=None, kind=0, Xval=None, CLev=None):
     ``stat.SE``/``stat.ME`` for the mean response and ``stat.SEPred``/
     ``stat.MEPred`` with ``stat.LowerPred``/``stat.UpperPred`` for one future
     observation.
+
+    The guide publishes this through two tables that run together: the common
+    head (``stat.RegEqn`` … ``stat.Resid``) followed by the tail for the
+    selected ``kind``.  So ``stat.Resid`` lands in the *middle* of the run, not
+    at the end, and the two kinds differ in more than their interval names --
+    ``kind=0`` ends with ``stat.SESlope``/``stat.s``, while ``kind=1`` has
+    neither and ends with ``stat.y``.  There are no ``*Reg`` echo lists here at
+    all; that is the same omission the guide makes for the multiple models.
     """
     from .distributions import invt
 
@@ -861,13 +878,16 @@ def LinRegtIntervals(X, Y, F=None, kind=0, Xval=None, CLev=None):
         "df": df,
         "r²": r * r,
         "r": r,
-        "s": s,
-        "SESlope": se_slope,
+        "Resid": _list(resid),
     }
     if _int(kind) == 0:
-        d["CLower"] = b - tcrit * se_slope
-        d["CUpper"] = b + tcrit * se_slope
-        d["ME"] = tcrit * se_slope
+        d.update({
+            "CLower": b - tcrit * se_slope,
+            "CUpper": b + tcrit * se_slope,
+            "ME": tcrit * se_slope,
+            "SESlope": se_slope,
+            "s": s,
+        })
     else:
         if Xval is None:
             raise ArgumentError("response intervals need Xval")
@@ -876,8 +896,6 @@ def LinRegtIntervals(X, Y, F=None, kind=0, Xval=None, CLev=None):
         se = s * sqrt(1.0 / n + (xv - mx) ** 2 / sxx)
         sepred = s * sqrt(1.0 + 1.0 / n + (xv - mx) ** 2 / sxx)
         d.update({
-            "y": yhat,
-            "XVal": xv,
             "CLower": yhat - tcrit * se,
             "CUpper": yhat + tcrit * se,
             "ME": tcrit * se,
@@ -886,8 +904,9 @@ def LinRegtIntervals(X, Y, F=None, kind=0, Xval=None, CLev=None):
             "UpperPred": yhat + tcrit * sepred,
             "MEPred": tcrit * sepred,
             "SEPred": sepred,
+            "y": yhat,
         })
-    return publish(_finish(d, resid, px, py, w))
+    return publish(d)
 
 
 def LinRegtTest(X, Y, Freq=None, Hypoth=0):
@@ -933,8 +952,11 @@ def LinRegtTest(X, Y, Freq=None, Hypoth=0):
         "b": b,
         "s": s,
         "SESlope": se_slope,
-        "r2": r * r,
+        # lower case here, unlike QuadReg's stat.R² -- the guide's LinRegtTest
+        # table prints stat.r², the twin of the stat.r right below it.
         "r²": r * r,
         "r": r,
     }
-    return publish(_finish(d, resid, px, py, w))
+    # No stat.XReg/stat.YReg/stat.FreqReg echo lists: the guide's LinRegtTest
+    # table stops at stat.Resid, so the echo tail is suppressed.
+    return publish(_finish(d, resid, None, py, None))

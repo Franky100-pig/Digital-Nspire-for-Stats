@@ -208,7 +208,6 @@ from .inference import (
     ANOVA,
     ANOVA2way,
     FTest_2Samp,
-    NAME_SUPERSETS,
     chi2GOF,
     chi22way,
     tInterval,
@@ -315,7 +314,6 @@ __all__ = [
     "zTest", "tTest", "zTest_2Samp", "tTest_2Samp", "FTest_2Samp",
     "zTest_1Prop", "zTest_2Prop",
     "chi2GOF", "χ2GOF", "chi22way", "χ22way", "ANOVA", "ANOVA2way",
-    "NAME_SUPERSETS",
     # catalogue
     "MENU", "OFF_MENU",
     "ascii_name", "ti_spelling", "catalog", "lookup", "menu_tree",

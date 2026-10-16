@@ -44,76 +44,70 @@ def _reset_quartile_method():
 # ==========================================================================
 # 1. name fidelity: the stat.* tables, function by function
 # ==========================================================================
-#: {function call: the exact ordered stat.* names the reference guide lists}.
+#: (label, call, reference-table name, form, kwargs for publishes()).
+#:
+#: The pinned tables themselves live in ``tinspire_stats._refguide``, and
+#: ``tests/test_statresults.py`` asserts every one of them against a real run.
+#: Nothing is re-typed here.  What this list does add is a second pass over
+#: each function's *other* invocation form -- the summary-statistics input
+#: where the first pass used raw data -- because a function that changed its
+#: published names between the two input forms would still pass a one-form
+#: check.
 DOCUMENTED_OUTPUTS = [
-    ("OneVar([1,2,3,4])", lambda: ts.OneVar([1, 2, 3, 4]), "v Σx Σx² sx σx n "
-     "MinX Q1X MedianX Q3X MaxX SSX"),
-    ("TwoVar([1,2,3],[4,5,6])", lambda: ts.TwoVar([1, 2, 3], [4, 5, 6]),
-     "v Σx Σx² sx σx w Σy Σy² sy σy Σxy r MinX Q1X MedianX Q3X MaxX "
-     "MinY Q1Y MedianY Q3Y MaxY Σ(x-v)2 Σ(y-w)2 n"),
-    ("FiveNumSummary([1,2,3,4])", lambda: ts.FiveNumSummary([1, 2, 3, 4]),
-     "MinX Q1X MedianX Q3X MaxX"),
+    ("OneVar", lambda: ts.OneVar([1, 2, 3, 4]), "OneVar", 0, {}),
+    ("TwoVar", lambda: ts.TwoVar([1, 2, 3], [4, 5, 6]), "TwoVar", 0, {}),
+    ("FiveNumSummary", lambda: ts.FiveNumSummary([1, 2, 3, 4]),
+     "FiveNumSummary", 0, {}),
     ("LinRegMx", lambda: ts.LinRegMx([1, 2, 3, 4, 5], [2, 4, 6, 8, 10]),
-     "RegEqn m b r² r Resid XReg YReg FreqReg"),
+     "LinRegMx", 0, {}),
     ("LinRegBx", lambda: ts.LinRegBx([1, 2, 3, 4, 5], [2, 4, 6, 8, 10]),
-     "RegEqn a b r² r Resid XReg YReg FreqReg"),
+     "LinRegBx", 0, {}),
     ("QuadReg", lambda: ts.QuadReg([1, 2, 3, 4, 5], [1, 4, 9, 16, 25]),
-     "RegEqn a b c R2 r² Resid XReg YReg FreqReg"),
-    ("LnReg", lambda: ts.LnReg([1, 2, 3, 4, 5], [1, 2, 3, 4, 5]),
-     "RegEqn a b r² r ResidTrans Resid XReg YReg FreqReg"),
-    ("zInterval", lambda: ts.zInterval(2, 5.0, 25, 0.95),
-     "CLower CUpper x ME sx n σ"),
-    ("tInterval", lambda: ts.tInterval(5.0, 2.0, 25, 0.95),
-     "CLower CUpper v ME df sx n σx x"),
-    ("zTest", lambda: ts.zTest(5.0, 2.0, [3, 4, 5, 6, 7], None, 0),
-     "z PVal x n sx"),
-    ("tTest", lambda: ts.tTest(5.0, [3, 4, 5, 6, 7], None, 0),
-     "t PVal df v sx n x"),
-    ("tTest_2Samp", lambda: ts.tTest_2Samp(3.0, 1.0, 5, 4.0, 2.0, 6, 0, 0),
-     "t PVal df v1 v2 sx1 sx2 n1 n2 x1 x2 x1-x2"),
-    ("FTest_2Samp", lambda: ts.FTest_2Samp(1.5, 10, 2.5, 12, 0),
-     "F PVal dfNumer dfDenom sx1 sx2 x1_bar x2_bar n1 n2"),
-    ("chi2GOF", lambda: ts.chi2GOF([10, 20, 30], [20, 20, 20], 2),
-     "χ² PVal df CompList"),
-    ("chi22way", lambda: ts.chi22way([[10, 20], [30, 40]]),
-     "χ² PVal df ExpMatrix CompMatrix"),
+     "QuadReg", 0, {}),
+    ("LnReg", lambda: ts.LnReg([1, 2, 3, 4, 5], [1, 2, 3, 4, 5]), "LnReg", 0, {}),
+    # --- the Stats input forms -------------------------------------------
+    ("zInterval stats", lambda: ts.zInterval(2, 5.0, 25, 0.95), "zInterval", 0, {}),
+    ("tInterval stats", lambda: ts.tInterval(5.0, 2.0, 25, 0.95), "tInterval", 0, {}),
+    ("zTest stats", lambda: ts.zTest(5.0, 2.0, 5.0, 25, 0), "zTest", 1, {}),
+    ("tTest stats", lambda: ts.tTest(5.0, 5.0, 2.0, 25, 0), "tTest", 0, {}),
+    ("tTest_2Samp stats", lambda: ts.tTest_2Samp(3.0, 1.0, 5, 4.0, 2.0, 6, 0, 0),
+     "tTest_2Samp", 0, {}),
+    ("FTest_2Samp stats", lambda: ts.FTest_2Samp(1.5, 10, 2.5, 12, 0),
+     "FTest_2Samp", 0, {}),
+    ("chi2GOF", lambda: ts.chi2GOF([10, 20, 30], [20, 20, 20], 2), "\u03c7\u00b2GOF", 0, {}),
+    ("chi22way", lambda: ts.chi22way([[10, 20], [30, 40]]), "\u03c7\u00b22way", 0, {}),
     ("ANOVA", lambda: ts.ANOVA([1, 2, 3, 4], [2, 3, 4, 5], [3, 4, 5, 6]),
-     "F PVal df SS MS dfError SSError MSError sp xbarlist CLowerList CUpperList"),
-    ("zInterval_1Prop", lambda: ts.zInterval_1Prop(42, 100),
-     "CLower CUpper Ç ME n"),
-    ("zTest_1Prop", lambda: ts.zTest_1Prop(0.5, 42, 100),
-     "p0 z PVal Ç n"),
+     "ANOVA", 0, {}),
+    ("ANOVA2way", lambda: ts.ANOVA2way([1, 2, 3, 4, 5, 9], [2, 3, 4, 5, 6, 7]),
+     "ANOVA2way", 0, {}),
+    ("zInterval_1Prop", lambda: ts.zInterval_1Prop(42, 100), "zInterval_1Prop", 0, {}),
+    ("zTest_1Prop", lambda: ts.zTest_1Prop(0.5, 42, 100), "zTest_1Prop", 0, {}),
 ]
 
 
-@pytest.mark.parametrize("label,call,want", DOCUMENTED_OUTPUTS,
+@pytest.mark.parametrize("label,call,name,form,kwargs", DOCUMENTED_OUTPUTS,
                          ids=[c[0] for c in DOCUMENTED_OUTPUTS])
-def test_documented_stat_names_are_present(label, call, want):
-    """Every name in the guide's table for that function answers."""
-    call()
-    missing = [n for n in want.split() if n not in stat]
-    assert not missing, f"{label}: stat has no {missing} (has {stat.keys()})"
+def test_documented_stat_names_match_the_reference_table(label, call, name, form,
+                                                         kwargs):
+    """The run publishes exactly the guide's names -- no more, no fewer.
 
-
-@pytest.mark.parametrize("label,call,want", DOCUMENTED_OUTPUTS,
-                         ids=[c[0] for c in DOCUMENTED_OUTPUTS])
-def test_documented_stat_names_are_exhaustive(label, call, want):
-    """...and nothing extra is published that the guide does not list.
-
-    ``NAME_SUPERSETS`` deliberately publishes a second spelling for a handful of
-    names, because two editions of the guide print them differently.  Those
-    alternates are allowed here; anything *else* leaking into the group is not.
+    Equality, not a subset, and not a union with a list of tolerated extras: a
+    name the guide omits would put a line on ``stat.results`` the device does
+    not show, and an unrequested twin can shadow a value a later calculation
+    leaves behind.
     """
+    from tinspire_stats import _refguide
+
+    stat.publish({})
     call()
-    listed = set(want.split())
-    allowed = set(listed)
-    for key, alternates in ts.NAME_SUPERSETS.items():
-        if key in listed:
-            allowed.update(alternates)
-    if {"v1", "v2"} <= listed:
-        allowed.add("x1-x2")
-    extra = [n for n in stat.keys() if n not in allowed]
-    assert not extra, f"{label}: publishes undocumented {extra}"
+    expected = list(_refguide.publishes(name, form, **kwargs))
+    assert list(stat.keys()) == expected, (
+        f"{label}\n"
+        f"  extra   : {[k for k in stat.keys() if k not in expected]}\n"
+        f"  missing : {[k for k in expected if k not in stat.keys()]}\n"
+        f"  expected: {expected}\n"
+        f"  got     : {list(stat.keys())}"
+    )
 
 
 def test_nothing_is_published_before_a_calculation():
@@ -144,7 +138,7 @@ def test_stat_is_a_singleton_that_is_replaced_not_merged():
     ("CompMat", "CompMatrix"),
     ("Sigmax", "Σx"),    # ASCII convenience twins
     ("xbar", "v"),
-    ("pbar", "Ç"),
+    ("pbar", "p̂"),
 ])
 def test_alternative_spellings_resolve(typed, equal_to):
     from tinspire_stats.statvar import canonical
@@ -269,10 +263,12 @@ def test_t_interval_data_and_stats_forms_agree():
     data = [3.0, 4.0, 5.0, 6.0, 7.0]
     ts.tInterval(data, None, 0.95)
     from_data = stat.as_dict()
-    ts.tInterval(stat.v, stat.sx, int(stat.n), 0.95)
+    # the *result* is stat.σx even though the Stats syntax calls the argument sx
+    ts.tInterval(stat.v, stat.σx, int(stat.n), 0.95)
     from_stats = stat.as_dict()
     for key in ("CLower", "CUpper", "ME", "df"):
         assert from_data[key] == pytest.approx(from_stats[key]), key
+    assert "sx" not in from_stats, "tInterval must not publish a stat.sx twin"
 
 
 def test_z_interval_parks_the_mean_in_stat_x_not_stat_v():

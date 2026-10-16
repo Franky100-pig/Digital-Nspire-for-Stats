@@ -85,11 +85,12 @@ sample = [180, 185, 165, 178, 190, 188]
 ts.tInterval(sample, None, 0.95)
 print("Data form: tInterval(List, Freq, CLevel)")
 show()
-lo, hi, mean, s, n = stat.CLower, stat.CUpper, stat.v, stat.sx, stat.n
+lo, hi, mean, s, n = stat.CLower, stat.CUpper, stat.v, stat.σx, stat.n
 
 ts.tInterval(mean, s, n, 0.95)
 print()
-print("Stats form: tInterval(v, sx, n, CLevel) -- identical answer:")
+print("Stats form: tInterval(v, sx, n, CLevel) -- identical answer.")
+print("The argument is sx; the result is stat.σx.  That asymmetry is TI's.")
 show()
 
 

@@ -467,7 +467,7 @@ def inference():
     check("tInterval CLower", ts.stat.CLower, float(arr.mean()) - me_t, tol=1e-7)
     check("tInterval CUpper", ts.stat.CUpper, float(arr.mean()) + me_t, tol=1e-7)
     check("tInterval df", ts.stat.df, df)
-    check("tInterval sx", ts.stat.sx, s, tol=1e-10)
+    check("tInterval σx", ts.stat.σx, s, tol=1e-10)
 
     # Welch two-sample
     a = [180.0, 185, 165, 178, 190, 188]

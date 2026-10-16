@@ -25,7 +25,7 @@ StatGroup(RegEqn, m, b, r², r, Resid, XReg, YReg, FreqReg)
 'y=3.·x+2.'
 
 >>> tInterval(2.0, 1.5, 25, 0.95)
-StatGroup(CLower, CUpper, v, ME, df, sx, n, σx, x)
+StatGroup(CLower, CUpper, v, ME, df, σx, n)
 >>> round(stat.ME, 4)
 0.6192
 ```
@@ -224,10 +224,33 @@ One of TI's own inconsistencies, preserved rather than tidied:
 
 ```python
 >>> zInterval(2, [3, 4, 5, 6, 7], None, 0.95)   # mean lands in stat.x
-StatGroup(CLower, CUpper, x, ME, sx, n, σ, σx)
+StatGroup(CLower, CUpper, x, ME, sx, n, σ)
 >>> tInterval([3, 4, 5, 6, 7], None, 0.95)      # mean lands in stat.v
-StatGroup(CLower, CUpper, v, ME, df, sx, n, σx, x)
+StatGroup(CLower, CUpper, v, ME, df, σx, n)
 ```
+
+### The siblings do not agree on what to call the sample standard deviation
+
+This one looks like a typo in the guide and is not. Four of these functions
+report the same quantity under two different names, and `zInterval` reports a
+*second*, different quantity under a name one character away from `σx`:
+
+| procedure | sample SD | mean | notes |
+| --- | --- | --- | --- |
+| `zInterval` | `stat.sx` | `stat.x` | also `stat.σ`, the known **population** σ the caller passed in |
+| `zTest` | `stat.sx` | `stat.x` | `stat.sx` only for Data input; a Stats run leaves it undefined |
+| `tInterval` | `stat.σx` | `stat.v` | |
+| `tTest` | `stat.sx` | `stat.v` | |
+| `tInterval_2Samp` | `stat.σx1`, `stat.σx2` | `stat.v1`, `stat.v2` | |
+| `tTest_2Samp` | `stat.sx1`, `stat.sx2` | `stat.v1`, `stat.v2` | |
+
+`stat.σ` at `zInterval` is the tell that these are deliberate: the same pages
+write every other sigma variable as a Greek-entity span *followed by a literal*
+`x` — `σx`, `σx1`, `σx2`, `σy`, eleven times over — and write the bare span with
+nothing after it exactly once, here, next to `stat.sx` "Sample standard
+deviation" and described as "Known population standard deviation". So the names
+are published as printed, one per quantity: nothing is doubled up, and nothing
+is quietly renamed to match its neighbour.
 
 ### Every family has a `Data` form and a `Stats` form
 
@@ -279,9 +302,9 @@ The pairs live in `statvar.DUPLICATE_SPELLINGS`:
 | Two names for one variable | `stat.P Value`, `stat.ExpMat`, `stat.CompMat` | `stat.PVal`, `stat.ExpMatrix`, `stat.CompMatrix` |
 | Edition drift | `stat.MedY`, `stat.Frow` | `stat.MedianY`, `stat.FRow` |
 
-And for a handful of names, two editions print different *letters*, so both are
-published — see `inference.NAME_SUPERSETS` (`stat.sx`/`stat.σx`,
-`stat.v`/`stat.x`).
+Those are *input* aliases: they let you type a name the guide prints badly. They
+do not add anything to `stat.results`, which carries one name per quantity — see
+the σ-table above for the case where that distinction matters most.
 
 ### Python identifier problems
 
