@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="la-entry-module" content="engine">
+<title>TI-Nspire CX II Statistics &mdash; in the browser</title>
+<meta name="description" content="A TI-Nspire CX II front panel for the statistics functions, running the real Python package in your browser. 84 catalog names, spelled as the guide spells them.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23353b44'/%3E%3Crect x='5' y='6' width='22' height='13' rx='2' fill='%23eef2f5'/%3E%3Crect x='5' y='23' width='22' height='4' rx='2' fill='%23e8912f'/%3E%3C/svg%3E">
+<style>
+/* ==========================================================================
+   Two palettes at once, on purpose.
+
+   The page follows the system theme.  The calculator does not: it is a
+   photograph of an object, and an object does not change colour when you
+   turn the lights off.  So the chassis tones are fixed while everything
+   around them -- including the lit screen, which really would be dimmer at
+   night -- follows prefers-color-scheme.
+   ========================================================================== */
+:root{
+  --bg:#ffffff;
+  --surface:#f7f9fc;
+  --surface-2:#eef2f8;
+  --line:#e3e9f2;
+  --line-strong:#cdd7e5;
+  --ink:#1c2739;
+  --ink-soft:#5a6b82;
+  --ink-faint:#8a97a8;
+  --accent:#2f6fed;
+  --accent-soft:#eaf1ff;
+  --good:#12805a;
+  --good-soft:#e6f5ee;
+  --warn:#9a6300;
+  --warn-soft:#fdf3e0;
+  --bad:#c0392b;
+  --bad-soft:#fdeceb;
+  --radius:12px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif;
+
+  /* the lit screen */
+  --lcd:#f6f8f9;
+  --lcd-ink:#101519;
+  --lcd-dim:#5d6b76;
+  --lcd-rule:#cfd8de;
+  --lcd-sel:#e4eaef;
+
+  /* the handheld.  fixed, both themes. */
+  --case-hi:#4a515b;
+  --case:#333941;
+  --case-lo:#1f242a;
+  --plate:#3d434c;
+  --plate-lo:#2b3037;
+  --key-face:linear-gradient(180deg,#4e555f,#3c424b);
+  --key-face-2:linear-gradient(180deg,#5b626c,#464d56);
+  --key-edge:#20252b;
+  --key-ink:#f0f3f6;
+  --key-shadow:rgba(0,0,0,.45);
+  --acc:#ec9a3c;
+  --enter-key:linear-gradient(180deg,#3f82f5,#2a61c9);
+  --bezel:#14181c;
+
+  /* the device geometry.  everything scales off --dw so the keypad keeps the
+     handheld's proportions instead of collapsing on a narrow window. */
+  --dw:clamp(320px,94vw,472px);
+  --sw:calc(var(--dw) * .876);
+  --du:calc(var(--dw) / 100);       /* one percent of the device width */
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0e1621; --surface:#151f2e; --surface-2:#1b2739; --line:#243247;
+    --line-strong:#33445e; --ink:#e8eef7; --ink-soft:#a9b8cc; --ink-faint:#7b8ba1;
+    --accent:#6d9bff; --accent-soft:#1a2740; --good:#4fd1a0; --good-soft:#122e26;
+    --warn:#e0b355; --warn-soft:#2c2415; --bad:#f08a80; --bad-soft:#2e1a19;
+    --lcd:#0f151b;
+    --lcd-ink:#dbe6ef;
+    --lcd-dim:#8fa1b0;
+    --lcd-rule:#26313b;
+    --lcd-sel:#1c242d;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--sans);
+  font-size:15px; line-height:1.55; -webkit-font-smoothing:antialiased;
+  display:flex; flex-direction:column; min-height:100vh;
+}
+
+/* ---------- top bar ---------- */
+.topbar{
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  padding:12px clamp(14px,3vw,30px); border-bottom:1px solid var(--line);
+  position:sticky; top:0; z-index:30; background:var(--bg);
+}
+.brand{display:flex; align-items:center; gap:11px; min-width:0}
+.brand h1{margin:0; font-size:15.5px; font-weight:650; letter-spacing:-.01em; white-space:nowrap}
+.brand p{margin:1px 0 0; font-size:12.5px; color:var(--ink-soft)}
+.spacer{flex:1 1 auto}
+.status{
+  font-size:12px; color:var(--ink-soft); background:var(--surface);
+  border:1px solid var(--line); border-radius:999px; padding:4px 12px;
+  max-width:min(54ch,58vw); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+body.engine-ready .status{color:var(--good); background:var(--good-soft); border-color:transparent}
+body.engine-failed .status{color:var(--bad); background:var(--bad-soft); border-color:transparent}
+.btn{
+  border:1px solid var(--line-strong); background:var(--bg); color:var(--ink-soft);
+  border-radius:9px; padding:5px 13px; font-size:12.5px; font-family:var(--sans); cursor:pointer;
+  white-space:nowrap; text-decoration:none;
+}
+.btn:hover{color:var(--accent); border-color:var(--accent)}
+.btn:disabled{opacity:.45; cursor:not-allowed}
+
+/* ---------- layout ---------- */
+.layout{
+  flex:1 1 auto; display:grid; gap:clamp(16px,2.4vw,30px);
+  grid-template-columns:auto minmax(300px,1fr);
+  padding:clamp(16px,3vw,30px) clamp(14px,3vw,30px) 24px;
+  align-items:start; max-width:1240px; width:100%; margin:0 auto;
+  justify-content:center;
+}
+@media (max-width:1000px){ .layout{grid-template-columns:1fr} }
+.stage{display:flex; flex-direction:column; align-items:center; gap:14px; min-width:0}
+@media (max-width:1000px){ .stage{width:100%} }
+
+/* ==========================================================================
+   The handheld
+   ========================================================================== */
+.device{
+  width:var(--dw);
+  padding:calc(var(--du)*3.2) calc(var(--du)*3.4) calc(var(--du)*4.2);
+  border-radius:calc(var(--du)*4.6);
+  background:
+    linear-gradient(180deg,var(--case-hi) 0%,var(--case) 22%,var(--case-lo) 100%);
+  box-shadow:
+    0 calc(var(--du)*1.4) calc(var(--du)*4) rgba(20,25,32,.45),
+    0 1px 0 rgba(255,255,255,.10) inset,
+    0 -2px 0 rgba(0,0,0,.30) inset;
+  border:1px solid rgba(0,0,0,.45);
+  position:relative;
+  user-select:none;
+}
+/* the moulded seam that runs around a real Nspire */
+.device::after{
+  content:""; position:absolute; inset:calc(var(--du)*1.1);
+  border-radius:calc(var(--du)*3.9);
+  border:1px solid rgba(255,255,255,.055);
+  pointer-events:none;
+}
+.brandbar{
+  display:flex; align-items:baseline; justify-content:space-between; gap:8px;
+  padding:0 calc(var(--du)*1.6) calc(var(--du)*2.2);
+}
+.brandbar .ti{
+  font-size:calc(var(--du)*2.5); letter-spacing:.16em; font-weight:700;
+  color:#c9d1da; text-transform:uppercase;
+}
+.brandbar .model{
+  font-size:calc(var(--du)*2.6); font-weight:600; color:#e8edf2; letter-spacing:.01em;
+}
+.brandbar .model em{font-style:normal; color:var(--acc)}
+
+/* --- the screen --- */
+.lcd-wrap{
+  padding:calc(var(--du)*2.4) calc(var(--du)*2.4) calc(var(--du)*3);
+  border-radius:calc(var(--du)*2.4);
+  background:linear-gradient(180deg,#0c0f13,#191e24);
+  box-shadow:0 calc(var(--du)*.8) calc(var(--du)*2) rgba(0,0,0,.55) inset,
+             0 0 0 1px rgba(255,255,255,.05);
+}
+.lcd{
+  width:var(--sw); height:calc(var(--sw) * .75);
+  overflow:hidden; border-radius:calc(var(--du)*.9);
+  background:var(--lcd);
+  box-shadow:0 0 0 1px rgba(0,0,0,.6), 0 0 calc(var(--du)*1.2) rgba(90,150,220,.10);
+}
+/* A real 320x240 panel, drawn at its own scale and then scaled up.  Doing it
+   this way keeps the status bar, the entry line and the font proportions in
+   the calculator's own coordinates instead of approximating them. */
+.lcd-in{
+  width:320px; height:240px; transform:scale(calc(var(--sw) / 320));
+  transform-origin:top left;
+  display:flex; flex-direction:column;
+  font-family:var(--mono); font-size:11px; line-height:1.32; color:var(--lcd-ink);
+  background:var(--lcd);
+}
+.statusbar{
+  flex:0 0 auto; height:15px; display:flex; align-items:center; gap:7px;
+  padding:0 5px; font-size:8.5px; color:var(--lcd-dim);
+  border-bottom:1px solid var(--lcd-rule);
+}
+.statusbar .pg{font-weight:700; color:var(--lcd-ink)}
+.statusbar .docname{flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.statusbar .smode{letter-spacing:.05em}
+.statusbar svg{display:block}
+.viewport{
+  flex:1 1 auto; overflow-y:auto; overflow-x:hidden;
+  padding:3px 5px 5px; scrollbar-gutter:stable;
+}
+.viewport::-webkit-scrollbar{width:5px}
+.viewport::-webkit-scrollbar-track{background:transparent}
+.viewport::-webkit-scrollbar-thumb{background:var(--lcd-rule); border-radius:99px}
+.entryline{
+  flex:0 0 auto; display:flex; align-items:center; gap:3px; padding:2px 5px 3px;
+  border-top:1px solid var(--lcd-rule); background:var(--lcd);
+}
+.entryline .arrow{color:var(--lcd-dim); font-size:11px}
+#cmd{
+  flex:1 1 auto; min-width:0; border:0; outline:0; background:transparent;
+  font-family:var(--mono); font-size:11px; color:var(--lcd-ink); padding:1px 0;
+}
+#cmd::placeholder{color:var(--lcd-dim); opacity:.7}
+.hidden-submit{position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; border:0; padding:0}
+
+/* --- things drawn on the screen --- */
+.ent{padding:3px 0 5px}
+.ent + .ent{border-top:1px solid var(--lcd-rule)}
+.in{display:flex; gap:3px; color:var(--lcd-ink); word-break:break-word}
+.in .arrow{color:var(--lcd-dim); flex:0 0 auto}
+.in.is-bad{color:#d2453a}
+.out{text-align:right; color:var(--lcd-ink); word-break:break-word; padding-top:1px}
+.out.is-eq{text-align:left}
+.note{
+  margin:3px 0 0; font-family:var(--mono); font-size:10px; line-height:1.4;
+  color:var(--lcd-dim); white-space:pre-wrap; word-break:break-word;
+  background:var(--lcd-sel); border-radius:2px; padding:4px 5px;
+}
+.tbl{margin-top:3px; border:1px solid var(--lcd-rule); border-radius:2px; overflow:hidden}
+.tbl-h{
+  display:flex; align-items:center; gap:5px; padding:2px 5px;
+  background:var(--lcd-sel); border-bottom:1px solid var(--lcd-rule);
+  font-size:9px; color:var(--lcd-dim);
+}
+.tbl-h .carry{color:#b8792a}
+.tbl-h .cp{margin-left:auto; background:none; border:0; padding:0 1px; font:inherit; font-size:9px;
+  color:var(--lcd-dim); cursor:pointer}
+.tbl-h .cp:hover{color:var(--lcd-ink)}
+.tbl table{width:100%; border-collapse:collapse; font-size:10px}
+.tbl td{padding:1px 5px; vertical-align:top}
+.tbl tr + tr td{border-top:1px solid var(--lcd-rule)}
+.tbl .nm{color:var(--lcd-dim); white-space:nowrap; width:1%}
+.tbl .vl{text-align:right; word-break:break-word}
+.tbl .vl.eq{color:#2f6fed}
+.tbl .len{color:var(--lcd-dim); font-size:9px}
+/* a TI error dialog, not a web error card */
+.dlg{margin:4px 0 2px; border:1px solid var(--lcd-ink); border-radius:2px; background:var(--lcd)}
+.dlg-t{padding:2px 5px; background:var(--lcd-ink); color:var(--lcd); font-size:10px}
+.dlg-b{padding:4px 5px; font-size:10px; white-space:pre-wrap; word-break:break-word}
+.dlg-b .k{color:var(--lcd-dim)}
+.dlg-f{display:flex; justify-content:flex-end; gap:4px; padding:0 5px 4px}
+.dlg-f button{
+  font:inherit; font-size:10px; padding:1px 10px; cursor:pointer;
+  border:1px solid var(--lcd-ink); border-radius:2px; background:var(--lcd); color:var(--lcd-ink);
+}
+.dlg-f button:hover{background:var(--lcd-sel)}
+.empty{padding:6px 3px; color:var(--lcd-dim); font-size:10px}
+.empty b{color:var(--lcd-ink); font-weight:700}
+.empty code{font-family:var(--mono); color:var(--lcd-ink)}
+.empty ul{margin:3px 0 0; padding-left:13px}
+.empty li{margin:1px 0}
+
+/* --- keypad --- */
+.pad{
+  margin-top:calc(var(--du)*3.2);
+  padding:calc(var(--du)*2.4) calc(var(--du)*1.8) calc(var(--du)*2.6);
+  border-radius:calc(var(--du)*2.2);
+  background:linear-gradient(180deg,var(--plate),var(--plate-lo));
+  box-shadow:0 1px 0 rgba(255,255,255,.07) inset, 0 -1px 0 rgba(0,0,0,.35) inset;
+  display:flex; flex-direction:column; gap:calc(var(--du)*1.5);
+}
+.grid{display:grid; gap:calc(var(--du)*1.15)}
+.g7{grid-template-columns:repeat(7,1fr)}
+.g6{grid-template-columns:repeat(6,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.g10{grid-template-columns:repeat(10,1fr)}
+
+.key{
+  position:relative; cursor:pointer; border:0;
+  border-radius:calc(var(--du)*1.05);
+  background:var(--key-face);
+  color:var(--key-ink);
+  font-family:var(--sans); font-weight:600;
+  font-size:calc(var(--du)*2.75); line-height:1;
+  height:calc(var(--du)*5.6);
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 1px 0 rgba(255,255,255,.14) inset,
+             0 -1.5px 0 var(--key-edge) inset,
+             0 1.5px 1.5px var(--key-shadow);
+  transition:transform .05s, filter .1s;
+  padding:0 1px;
+}
+.key:active,.key.down{transform:translateY(1px); filter:brightness(1.22)}
+/* the modifier key stays lit while it is armed */
+.key.latched{
+  transform:translateY(1px);
+  background:var(--acc); color:#fff;
+  box-shadow:0 0 0 1px var(--acc), 0 0 10px -2px var(--acc);
+}
+.key.latched *{color:#fff}
+.key:focus-visible{outline:2px solid var(--acc); outline-offset:1px}
+.key .sub{
+  position:absolute; top:calc(var(--du)*.5); left:calc(var(--du)*1);
+  font-size:calc(var(--du)*1.6); font-weight:600; color:var(--acc);
+  line-height:1; letter-spacing:0;
+}
+.key.k-fn{background:var(--key-face-2); font-size:calc(var(--du)*2.35)}
+.key.k-sm{font-size:calc(var(--du)*2.3); height:calc(var(--du)*5)}
+.key.k-util{background:var(--key-face-2)}
+.key.k-enter{background:var(--enter-key); font-size:calc(var(--du)*2.4)}
+.key.k-alpha{font-size:calc(var(--du)*2.8)}
+.key.k-sym{font-size:calc(var(--du)*2.5); height:calc(var(--du)*4.4)}
+.key.k-op{font-size:calc(var(--du)*3.2)}
+.key.wide{font-size:calc(var(--du)*2.3)}
+
+/* control cluster: [esc]  ( touchpad )  [ctrl]  /  [tab]  .  [del] */
+.nav{display:grid; grid-template-columns:auto 1fr auto; gap:calc(var(--du)*1.4); align-items:center}
+.nav-col{display:flex; flex-direction:column; gap:calc(var(--du)*1.15); width:calc(var(--du)*14)}
+.touchpad{
+  cursor:pointer; justify-self:center;
+  width:calc(var(--du)*21); height:calc(var(--du)*13);
+  border-radius:999px; border:0; padding:0; position:relative;
+  background:
+    radial-gradient(120% 150% at 50% -18%, rgba(255,255,255,.16), transparent 58%),
+    linear-gradient(180deg,#2a2f36,#1a1e23);
+  box-shadow:0 0 0 1px rgba(0,0,0,.6), 0 2px calc(var(--du)*1.4) rgba(0,0,0,.5) inset;
+  display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr);
+}
+.touchpad span{display:block}
+.touchpad .hz{color:#8e9aa6; display:grid; place-items:center; font-size:calc(var(--du)*2.1); line-height:1}
+.touchpad .ce{
+  border-radius:999px; background:linear-gradient(180deg,#454c56,#333941);
+  box-shadow:0 1px 0 rgba(255,255,255,.14) inset; margin:14%;
+}
+.touchpad .ce:active{filter:brightness(1.3)}
+.touchpad .hz:active{color:#fff}
+.nav-mid{grid-column:2; grid-row:1 / span 1}
+
+/* ==========================================================================
+   Reference rail and the rest of the page furniture
+   ========================================================================== */
+.ref{
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  display:flex; flex-direction:column; max-height:calc(100vh - 130px); position:sticky; top:78px;
+  min-width:0;
+}
+@media (max-width:1000px){ .ref{position:static; max-height:520px} }
+.ref-head{padding:12px 13px 10px; border-bottom:1px solid var(--line)}
+.ref-head h2{margin:0 0 9px; font-size:13px; font-weight:650; display:flex; align-items:center; gap:7px}
+.ref-head .count{font-weight:400; color:var(--ink-faint); font-size:11.5px}
+#refSearch{
+  width:100%; border:1px solid var(--line); border-radius:9px; padding:7px 10px;
+  font-size:13px; font-family:var(--sans); background:var(--bg); color:var(--ink); outline:0;
+}
+#refSearch:focus{border-color:var(--accent)}
+.ref-groups{overflow-y:auto; padding:6px 6px 12px}
+.ref-groups::-webkit-scrollbar{width:10px}
+.ref-groups::-webkit-scrollbar-thumb{background:var(--line-strong); border-radius:99px; border:3px solid var(--surface)}
+.grp-label{
+  font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-faint);
+  padding:11px 8px 5px; font-weight:600;
+}
+.fn{border-radius:8px; padding:2px 3px}
+.fn:hover{background:var(--bg)}
+.fn-head{display:flex; gap:8px; align-items:baseline; cursor:pointer; padding:4px 5px; border-radius:7px}
+.fn-name{
+  font-family:var(--mono); font-size:12px; color:var(--accent); background:none; border:0;
+  padding:0; cursor:pointer; text-align:left; white-space:nowrap;
+}
+.fn-name:hover,.fn-name:focus-visible{text-decoration:underline; outline:none}
+.fn-sig{font-family:var(--mono); font-size:11px; color:var(--ink-faint); flex:1 1 auto;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.fn .doc{display:none; font-size:12px; color:var(--ink-soft); white-space:pre-wrap;
+  margin:2px 6px 7px; padding-left:9px; border-left:2px solid var(--line); max-height:230px; overflow:auto}
+.fn.open .doc{display:block}
+.mini{font-size:9.5px; border-radius:5px; padding:1px 5px; margin-left:6px; vertical-align:1px;
+  background:var(--surface-2); color:var(--ink-faint)}
+.mini.iter{background:var(--warn-soft); color:var(--warn)}
+.empty-note{padding:16px 10px; color:var(--ink-faint); font-size:13px; text-align:center}
+
+.chips{display:flex; flex-wrap:wrap; gap:7px; align-items:center; justify-content:center; max-width:var(--dw)}
+.chips .lead{font-size:11.5px; color:var(--ink-faint)}
+.chip-btn{
+  font-family:var(--mono); font-size:11.5px; background:var(--surface); border:1px solid var(--line);
+  border-radius:999px; padding:4px 10px; cursor:pointer; color:var(--ink-soft);
+}
+.chip-btn:hover{color:var(--accent); border-color:var(--accent); background:var(--accent-soft)}
+.chip-btn.var{color:var(--good); border-color:transparent; background:var(--good-soft)}
+
+footer{
+  border-top:1px solid var(--line); padding:16px clamp(14px,3vw,30px) 26px; color:var(--ink-faint);
+  font-size:12px; max-width:1240px; margin:0 auto; width:100%;
+}
+footer p{margin:0 0 5px}
+footer code{font-family:var(--mono); font-size:11.5px}
+footer a{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div>
+      <h1>TI-Nspire CX II &mdash; statistics</h1>
+      <p>Type what you would type on the handheld. The calculator's own keys work.</p>
+    </div>
+  </div>
+  <span class="spacer"></span>
+  <span class="status" id="engineStatus">Starting the Python engine&hellip;</span>
+  <button class="btn" id="resetBtn" type="button" title="Clear variables, history and stat.results">Reset</button>
+  <a class="btn" id="repoLink" href="#" target="_blank" rel="noopener">Repository</a>
+</header>
+
+<main class="layout">
+  <section class="stage">
+
+    <div class="device" id="device">
+      <div class="brandbar">
+        <span class="ti">Texas&nbsp;Instruments</span>
+        <span class="model">TI-Nspire<em>&trade;</em> CX&nbsp;II</span>
+      </div>
+
+      <div class="lcd-wrap">
+        <div class="lcd">
+          <div class="lcd-in">
+            <div class="statusbar">
+              <span class="pg" id="pageIndicator">1.1</span>
+              <span class="docname" id="docName">Stats</span>
+              <span class="smode" id="angleMode">RAD</span>
+              <svg width="13" height="7" viewBox="0 0 13 7" aria-hidden="true">
+                <rect x=".5" y=".5" width="10" height="6" rx="1.2" fill="none" stroke="currentColor"/>
+                <rect x="11.6" y="2.2" width="1.4" height="2.6" rx=".6" fill="currentColor"/>
+                <rect x="1.6" y="1.6" width="6" height="3.8" rx=".6" fill="currentColor"/>
+              </svg>
+            </div>
+            <div class="viewport" id="screen">
+              <div class="empty" id="emptyState"></div>
+            </div>
+            <form class="entryline" id="promptForm" autocomplete="off">
+              <span class="arrow">&#9656;</span>
+              <input id="cmd" type="text" spellcheck="false" autocapitalize="off" autocorrect="off"
+                     placeholder="OneVar {1,2,4,8,16}" aria-label="TI-Nspire command line">
+              <button class="hidden-submit" type="submit" tabindex="-1" aria-hidden="true">Run</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="pad" id="pad">
+        <div class="nav">
+          <div class="nav-col">
+            <button class="key k-sm" data-k="esc" title="Esc &mdash; clear the entry line">esc</button>
+            <button class="key k-sm" data-k="tab" title="Tab &mdash; jump to the function reference">tab</button>
+          </div>
+          <button class="touchpad" data-k="touchpad" title="Touchpad &mdash; move the cursor; press the centre to evaluate">
+            <span></span><span class="hz" data-pad="up">&#9650;</span><span></span>
+            <span class="hz" data-pad="left">&#9664;</span><span class="ce" data-pad="ok"></span><span class="hz" data-pad="right">&#9654;</span>
+            <span></span><span class="hz" data-pad="down">&#9660;</span><span></span>
+          </button>
+          <div class="nav-col">
+            <button class="key k-sm k-util" data-k="ctrl" title="Ctrl &mdash; the character printed above the next key">ctrl</button>
+            <button class="key k-sm" data-k="del" title="Del &mdash; delete the previous character">del</button>
+          </div>
+        </div>
+
+        <div class="grid g4" id="funcRow"></div>
+        <div class="grid g7" id="alphaGrid"></div>
+        <div class="grid g10" id="symGrid"></div>
+        <div class="grid g6" id="numGrid"></div>
+      </div>
+    </div>
+
+    <div class="chips">
+      <span class="lead">Try:</span>
+      <span id="exampleChips"></span>
+    </div>
+  </section>
+
+  <aside class="ref">
+    <div class="ref-head">
+      <h2>Function reference <span class="count" id="refCount"></span></h2>
+      <input id="refSearch" type="search" placeholder="Search names, e.g. LinReg, tInterval&hellip;" aria-label="Search functions">
+    </div>
+    <div class="ref-groups" id="refGroups"><div class="empty-note">Loading the catalogue&hellip;</div></div>
+  </aside>
+</main>
+
+<footer>
+  <p id="footNote">
+    The front panel follows the TI&#8209;Nspire CX&nbsp;II layout; the keys and their names are from TI's
+    handheld key reference. Function names, argument order and the <code>stat.</code> result names are
+    copied from the TI&#8209;Nspire Reference Guide.
+  </p>
+  <p>
+    Everything runs in your browser and nothing is uploaded. The Python interpreter is served from
+    this same site, so the page needs no third-party CDN &mdash; the first visit downloads it once
+    (about 13&nbsp;MB) and the browser keeps it. The <code>doc</code> key, or typing
+    <code>help</code>, shows the syntax card.
+  </p>
+</footer>
+
+<script src="core_bundle.js"></script>
+<script src="la-bridge.js"></script>
+<script>
+"use strict";
+/* ==========================================================================
+   The front panel.
+
+   Two jobs: build the keypad the way the handheld has it, and draw results the
+   way the handheld draws them.  The Python side is reached only through
+   LA.dispatch({op, ...}) -- nothing here knows any statistics.
+   ========================================================================== */
+(function () {
+  const REPO = "https://github.com/Franky100-pig/Digital-Nspire-for-Stats";
+
+  const EXAMPLES = [
+    "OneVar {1,2,4,8,16}",
+    "LinRegMx {1,2,3,4,5},{5,8,11,14,17}",
+    "tInterval {3,4,5,6,7},,0.95",
+    "normCdf -1,1,0,1",
+    "binomPdf 10,.3,4",
+    "countif {1,2,3,9},?<3",
+    "\u03c7\u00b22way {{10,20},{30,40}}",
+    "ANOVA {1,2,3},{4,5,6},{7,8,9}"
+  ];
+
+  const HELP = [
+    "How to type these commands:",
+    "",
+    "  {1,2,3}                 a list            (not [1,2,3])",
+    "  OneVar v[,Freq]         an argument you skip is an empty field",
+    "  tInterval v,sx,n,,0.95  -> Freq omitted, CLevel given",
+    "  A = {3,1,4,1,5}         name a value, then pass A anywhere",
+    "  stat.v  stat.Q1X        read the last result back",
+    "  stat.RegEqn(6)          evaluate a fitted equation",
+    "  countif A,?<3           the ? stands for each element",
+    "  countif A,2\u2264?\u22644      chained criteria",
+    "",
+    "Arithmetic is the calculator's, not Python's:",
+    "",
+    "  2^3 = 8      not 1: ^ is a power sign here, not exclusive or",
+    "  6\u00d77  10\u00f74         \u00d7 \u00f7 \u00b7 and \u2212 all work",
+    "  \u221a16  \u221a(9+7)  3\u00b2    radical and superscripts work",
+    "  2\u03c0   3(4+1)          implicit multiplication works",
+    "  1.2E20  1.E-7           TI exponent notation, both ways",
+    "",
+    "On the keypad: ctrl then a letter gives its Greek letter,",
+    "del deletes, \u25b8\u203a starts a fresh page, and Reset clears everything."
+  ].join("\n");
+
+  /* ---------- the keypad, as the CX II actually has it ---------- */
+  //: ctrl shows the second character printed above a key, which on this
+  //: keypad is the Greek letter -- so ctrl+a types alpha, exactly as the
+  //: handheld's modifier key does.
+  const GREEK = {
+    a:"\u03b1", b:"\u03b2", c:"\u03b3", d:"\u03b4", e:"\u03b5", f:"\u03b6", g:"\u03b7",
+    h:"\u03b8", i:"\u03b9", j:"\u03ba", k:"\u03bb", l:"\u03bc", m:"\u03bd", n:"\u03be",
+    o:"\u03bf", p:"\u03c0", q:"\u03c1", r:"\u03c3", s:"\u03c4", t:"\u03c5", u:"\u03c6",
+    v:"\u03c7", w:"\u03c8", x:"\u03c9"
+  };
+  const ALPHA_ROWS = ["abcdefg", "hijklmn", "opqrstu", "vwxyz,:"];
+  const SYMBOLS = ["{", "}", "[", "]", "(", ")", "\u2264", "\u2265", "?", "\u2260"];
+
+  //: A key either inserts a character (``ins``) or runs an action (``action``).
+  //: `sub` is the smaller legend printed above the main one, the way the
+  //: handheld prints the alternative a key offers under the modifier key.
+  const FUNC_ROW = [
+    { label: "doc", ins: null, action: "doc", cls: "k-fn", sub: "~" },
+    { label: "menu", ins: null, action: "menu", cls: "k-fn" },
+    { label: "var", ins: null, action: "var", cls: "k-fn" },
+    { label: "\u00bb", ins: null, action: "scratch", cls: "k-fn", sub: "scratchpad" }
+  ];
+  const NUM_GRID = [
+    { label: "\u03c0", ins: "\u03c0", cls: "k-op" },
+    { label: "7", ins: "7" }, { label: "8", ins: "8" }, { label: "9", ins: "9" },
+    { label: "\u00d7", ins: "\u00d7", cls: "k-op" }, { label: "\u00f7", ins: "\u00f7", cls: "k-op" },
+
+    { label: "e", ins: "e", cls: "k-op" },
+    { label: "4", ins: "4" }, { label: "5", ins: "5" }, { label: "6", ins: "6" },
+    { label: "\u2212", ins: "\u2212", cls: "k-op" }, { label: "+", ins: "+", cls: "k-op" },
+
+    { label: "^", ins: "^", cls: "k-op", sub: "x\u00b2" },
+    { label: "1", ins: "1" }, { label: "2", ins: "2" }, { label: "3", ins: "3" },
+    { label: "=", ins: "=", cls: "k-op" },
+    { label: "\u21b5", ins: null, action: "enter", cls: "k-enter" },
+
+    { label: "\u221a", ins: "\u221a", cls: "k-op" },
+    { label: "0", ins: "0" }, { label: ".", ins: "." },
+    { label: "(\u2212)", ins: "\u2212", cls: "k-op" },
+    { label: ",", ins: "," }, { label: "\"", ins: "\"" }
+  ];
+
+  const el = (id) => document.getElementById(id);
+  const screen = el("screen"), cmd = el("cmd");
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  let history = [], hIndex = 0, busy = false, greekNext = false;
+  const variables = new Set();
+
+  /* ---------- keypad construction ---------- */
+  // Built with the DOM rather than an HTML string: key text includes characters
+  // that must not be hand-encoded into an attribute.
+  function mkKey(spec) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "key " + (spec.cls || "");
+    if (spec.sub) {
+      const s = document.createElement("span");
+      s.className = "sub";
+      s.textContent = spec.sub;
+      btn.appendChild(s);
+    }
+    btn.appendChild(document.createTextNode(spec.label));
+    if (spec.action) btn.dataset.action = spec.action;
+    else btn.dataset.ins = spec.ins;
+    btn.title = spec.action ? spec.action : "Insert " + spec.ins;
+    return btn;
+  }
+
+  function fill(host, specs) {
+    const box = el(host);
+    box.textContent = "";
+    specs.forEach((spec) => box.appendChild(mkKey(spec)));
+  }
+
+  function buildPad() {
+    fill("funcRow", FUNC_ROW);
+    const alpha = [];
+    ALPHA_ROWS.forEach((row) => Array.from(row).forEach((ch) => {
+      alpha.push({ label: ch, ins: ch, cls: "k-alpha", sub: GREEK[ch] });
+    }));
+    fill("alphaGrid", alpha);
+    fill("symGrid", SYMBOLS.map((ch) => ({ label: ch, ins: ch, cls: "k-sym" })));
+    fill("numGrid", NUM_GRID);
+  }
+
+  /* ---------- entry line ---------- */
+  function insert(text) {
+    const start = cmd.selectionStart == null ? cmd.value.length : cmd.selectionStart;
+    const end = cmd.selectionEnd == null ? start : cmd.selectionEnd;
+    cmd.value = cmd.value.slice(0, start) + text + cmd.value.slice(end);
+    const at = start + text.length;
+    cmd.setSelectionRange(at, at);
+    cmd.focus();
+  }
+  function backspace() {
+    const start = cmd.selectionStart, end = cmd.selectionEnd;
+    if (start == null) { cmd.value = cmd.value.slice(0, -1); return; }
+    if (start === end) {
+      if (start === 0) return;
+      cmd.value = cmd.value.slice(0, start - 1) + cmd.value.slice(end);
+      cmd.setSelectionRange(start - 1, start - 1);
+    } else {
+      cmd.value = cmd.value.slice(0, start) + cmd.value.slice(end);
+      cmd.setSelectionRange(start, start);
+    }
+    cmd.focus();
+  }
+  function moveCaret(delta) {
+    const at = cmd.selectionStart == null ? cmd.value.length : cmd.selectionStart;
+    const to = Math.max(0, Math.min(cmd.value.length, at + delta));
+    cmd.setSelectionRange(to, to);
+    cmd.focus();
+  }
+
+  /* ---------- drawing on the screen ---------- */
+  function varsTable(vars, carry) {
+    const head = '<div class="tbl-h"><span>stat.results</span>' +
+      (carry ? '<span class="carry">carried over</span>' : "") +
+      '<button class="cp" type="button">copy</button></div>';
+    const rows = vars.map((v) =>
+      "<tr><td class=\"nm\">stat." + esc(v.name) + "</td><td class=\"vl " +
+      esc(v.kind) + "\">" + esc(v.text) +
+      (v.length === null || v.length === undefined ? "" : '<span class="len"> (' + v.length + ")</span>") +
+      "</td></tr>").join("");
+    return '<div class="tbl">' + head + "<table>" + rows + "</table></div>";
+  }
+
+  function addEntry(text, r) {
+    const empty = el("emptyState");
+    if (empty) empty.remove();
+    const node = document.createElement("article");
+    node.className = "ent";
+
+    if (!r.ok) {
+      const e = r.error || {};
+      const sig = e.signature
+        ? '<span class="k">Expected: ' + esc(e.signature) + "</span><br>" : "";
+      const sug = e.suggestInput
+        ? '<div class="dlg-f"><button type="button" class="suggest" data-input="' +
+          esc(e.suggestInput) + '">Run ' + esc(e.suggest || "") + "</button></div>" : "";
+      node.innerHTML =
+        '<div class="in is-bad"><span class="arrow">&#9656;</span><span>' + esc(text) + "</span></div>" +
+        '<div class="dlg"><div class="dlg-t">' + esc(e.kind || "Error") + "</div>" +
+        '<div class="dlg-b">' + esc(e.message || "") + (sig ? "<br>" + sig : "") + "</div>" +
+        (sug ? sug : '<div class="dlg-f"><button type="button" class="ok">OK</button></div>') +
+        "</div>";
+    } else {
+      const answer = r.assign ? r.label : r.summary;
+      const out = answer
+        ? '<div class="out' + (r.assign ? " is-eq" : "") + '">' + esc(answer) + "</div>" : "";
+      const table = (r.vars && r.vars.length) ? varsTable(r.vars, r.carry) : "";
+      const doc = r.doc
+        ? '<pre class="note">' + esc(r.doc) + "</pre>" : "";
+      node.innerHTML =
+        '<div class="in"><span class="arrow">&#9656;</span><span>' + esc(text) + "</span></div>" +
+        out + table + doc;
+    }
+    screen.appendChild(node);
+    screen.scrollTop = screen.scrollHeight;
+  }
+
+  function addNote(body) {
+    const node = document.createElement("article");
+    node.className = "ent";
+    node.innerHTML = '<pre class="note" style="margin:0">' + esc(body) + "</pre>";
+    screen.appendChild(node);
+    screen.scrollTop = screen.scrollHeight;
+  }
+
+  function clearScreen(message) {
+    screen.innerHTML = '<div class="empty" id="emptyState">' + message + "</div>";
+  }
+
+  function copyText(text, button) {
+    const done = () => {
+      const was = button.textContent;
+      button.textContent = "copied";
+      setTimeout(() => { button.textContent = was; }, 1300);
+    };
+    const fallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.setAttribute("readonly", "");
+      ta.style.cssText = "position:fixed;top:-1000px";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); done(); } catch (e) { /* nothing to do */ }
+      document.body.removeChild(ta);
+    };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else { fallback(); }
+  }
+
+  /* ---------- running ---------- */
+  function run(text) {
+    text = (text || "").trim();
+    if (!text || busy) return;
+    if (text.toLowerCase() === "help") { addNote(HELP); return; }
+    if (!window.LA.ready) {
+      addEntry(text, { ok: false, error: { kind: "NotReady",
+        message: "The Python engine is still loading. Give it a moment, then press \u21b5 again." } });
+      return;
+    }
+    let r;
+    try {
+      r = window.LA.dispatch({ op: "run", input: text });
+    } catch (err) {
+      r = { ok: false, error: { kind: "BridgeError", message: String(err) } };
+    }
+    addEntry(text, r);
+    if (r.ok && r.assign) {
+      variables.add(r.assignName || text.split("=")[0].trim());
+      syncVariables();
+    }
+    history.push(text); hIndex = history.length;
+  }
+
+  /* ---------- actions bound to the keys that are not characters ---------- */
+  const ACTIONS = {
+    enter: () => { const v = cmd.value; cmd.value = ""; run(v); },
+    del: backspace,
+    // Esc clears the entry line and nothing else: on the handheld it backs out
+    // of whatever you are in, and wiping the results would not be that.
+    esc: () => { if (cmd.value) { cmd.value = ""; } cmd.focus(); },
+    tab: () => { const s = el("refSearch"); s.focus(); s.select(); },
+    doc: () => addNote(HELP),
+    menu: () => { const s = el("refSearch"); s.value = ""; s.dispatchEvent(new Event("input")); s.focus(); },
+    var: () => insert("stat."),
+    scratch: () => clearScreen("<b>New page.</b> Variables and <code>stat.results</code> are kept.")
+  };
+
+  function act(name) { const fn = ACTIONS[name]; if (fn) fn(); }
+
+  el("pad").addEventListener("click", (ev) => {
+    const padBtn = ev.target.closest("[data-pad]");
+    if (padBtn) {
+      const dir = padBtn.dataset.pad;
+      if (dir === "ok") return act("enter");
+      if (dir === "left") return moveCaret(-1);
+      if (dir === "right") return moveCaret(1);
+      if (dir === "up" || dir === "down") {
+        if (!history.length) return;
+        hIndex = Math.max(0, Math.min(history.length, hIndex + (dir === "up" ? -1 : 1)));
+        cmd.value = history[hIndex] || "";
+        cmd.focus();
+        return;
+      }
+      return;
+    }
+    const btn = ev.target.closest(".key");
+    if (!btn) return;
+    // Keys drawn by the builders carry the action in data-action.  The five in
+    // the control cluster are written out in the markup and carry the key's
+    // name in data-k instead.  Both name the same actions, so read both --
+    // without this the esc, tab and del keys were decoration.
+    const action = btn.dataset.action || btn.dataset.k;
+    if (action && ACTIONS[action]) return act(action);
+    let text = btn.dataset.ins;
+    if (text == null) return;
+    if (greekNext) {
+      // The modifier is spent on the next key whatever that key is, the way
+      // the handheld's does -- a latch that survives a digit press is a latch
+      // that surprises you two keys later.
+      disarmCtrl();
+      const letter = GREEK[text.toLowerCase()];
+      insert(letter || text);
+      return;
+    }
+    insert(text);
+  });
+
+  // ctrl latches for exactly one character, like the handheld's modifier.
+  function disarmCtrl() {
+    greekNext = false;
+    const k = document.querySelector('[data-k="ctrl"]');
+    if (k) k.classList.remove("latched");
+  }
+
+  el("pad").addEventListener("pointerdown", (ev) => {
+    const ctrl = ev.target.closest('[data-k="ctrl"]');
+    if (ctrl) {
+      greekNext = !greekNext;
+      // Show the latch: a modifier that changes what the next key means has to
+      // say so, or the Greek letter arrives as a surprise.
+      ctrl.classList.toggle("latched", greekNext);
+    }
+    const c = ev.target.closest(".key");
+    if (c && !c.classList.contains("latched")) {
+      c.classList.add("down");
+      setTimeout(() => c.classList.remove("down"), 90);
+    }
+  });
+
+  screen.addEventListener("click", (ev) => {
+    const sug = ev.target.closest(".suggest");
+    if (sug) { cmd.value = sug.dataset.input; run(cmd.value); return; }
+    if (ev.target.closest(".ok")) { ev.target.closest(".dlg").remove(); return; }
+    const cp = ev.target.closest(".cp");
+    if (cp) {
+      const rows = cp.closest(".tbl").querySelectorAll("table tr");
+      const lines = Array.from(rows).map((tr) =>
+        "stat." + tr.children[0].textContent + " = " + tr.children[1].textContent.trim());
+      copyText(lines.join("\n"), cp);
+    }
+  });
+
+  el("promptForm").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const v = cmd.value; cmd.value = ""; run(v);
+  });
+
+  cmd.addEventListener("keydown", (ev) => {
+    if (ev.key === "ArrowUp" && history.length) {
+      ev.preventDefault();
+      hIndex = Math.max(0, hIndex - 1); cmd.value = history[hIndex] || "";
+    } else if (ev.key === "ArrowDown" && history.length) {
+      ev.preventDefault();
+      hIndex = Math.min(history.length, hIndex + 1); cmd.value = history[hIndex] || "";
+    } else if (ev.key === "Escape") {
+      ev.preventDefault(); act("esc");
+    } else if (greekNext && ev.key.length === 1) {
+      // The modifier works from the physical keyboard too, or the key would be
+      // half a key: armed for the mouse and inert for the fingers.
+      const letter = GREEK[ev.key.toLowerCase()];
+      disarmCtrl();
+      if (letter) { ev.preventDefault(); insert(letter); }
+    }
+  });
+
+  el("resetBtn").addEventListener("click", () => {
+    if (window.LA.ready) window.LA.dispatch({ op: "reset" });
+    variables.clear(); syncVariables();
+    history = []; hIndex = 0;
+    clearScreen("<b>Reset.</b> Variables, history and <code>stat.results</code> are cleared.");
+    cmd.focus();
+  });
+
+  function syncVariables() {
+    const chips = EXAMPLES.map((c) =>
+      '<button class="chip-btn" type="button" data-input="' + esc(c) + '">' + esc(c) + "</button>");
+    variables.forEach((name) => {
+      chips.push('<button class="chip-btn var" type="button" data-input="' + esc(name) + '">' +
+                 esc(name) + " (saved)</button>");
+    });
+    el("exampleChips").innerHTML = chips.join("");
+  }
+  el("exampleChips").addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-input]");
+    if (b) { cmd.value = b.dataset.input; cmd.focus(); }
+  });
+
+  /* ---------- reference rail ---------- */
+  const shortSig = (sig) =>
+    String(sig || "").split("\n")[0].replace(/`/g, "").split(" -- ")[0].trim().replace(/\.$/, "");
+
+  function renderRef(functions) {
+    const groups = {};
+    functions.forEach((f) => { (groups[f.groupLabel] = groups[f.groupLabel] || []).push(f); });
+    el("refGroups").innerHTML = Object.keys(groups).sort().map((label) => {
+      const rows = groups[label].map((f) => {
+        const iter = f.fidelity === "iterative"
+          ? '<span class="mini iter" title="Converges iteratively; the last digits can differ between implementations">iterative</span>'
+          : "";
+        return '<div class="fn" data-name="' + esc(f.name) + '">' +
+          '<div class="fn-head"><button class="fn-name" type="button">' + esc(f.name) + "</button>" +
+          '<span class="fn-sig">' + esc(shortSig(f.signature)) + "</span>" + iter + "</div>" +
+          '<div class="doc">' + esc(f.doc || "No notes.") + "</div></div>";
+      }).join("");
+      return '<div class="grp-label">' + esc(label) + "</div>" + rows;
+    }).join("");
+  }
+
+  el("refGroups").addEventListener("click", (ev) => {
+    const row = ev.target.closest(".fn");
+    if (!row) return;
+    if (ev.target.closest(".fn-name")) {
+      cmd.value = row.dataset.name + " "; cmd.focus(); return;
+    }
+    if (ev.target.closest(".doc")) return;
+    row.classList.toggle("open");
+  });
+
+  el("refSearch").addEventListener("input", (ev) => {
+    const q = ev.target.value.trim().toLowerCase();
+    document.querySelectorAll("#refGroups .fn").forEach((n) => {
+      const hit = !q || n.dataset.name.toLowerCase().includes(q);
+      n.style.display = hit ? "" : "none";
+      if (q && hit) n.classList.remove("open");
+    });
+    document.querySelectorAll("#refGroups .grp-label").forEach((label) => {
+      let any = false, s = label.nextElementSibling;
+      while (s && s.classList.contains("fn")) {
+        if (s.style.display !== "none") any = true;
+        s = s.nextElementSibling;
+      }
+      label.style.display = any ? "" : "none";
+    });
+  });
+
+  /* ---------- boot ---------- */
+  el("repoLink").href = REPO;
+  buildPad();
+  syncVariables();
+  clearScreen(
+    "<b>Ready.</b> Type on the keypad, or use your own keyboard.<br>" +
+    "A list is <code>{1,2,3}</code>; an argument you skip stays empty:<br>" +
+    "<code>tInterval v,sx,n,,0.95</code>.<br>" +
+    "The <code>doc</code> key shows the syntax card."
+  );
+
+  window.LA.readyPromise.then(() => {
+    cmd.focus();
+    const cat = window.LA.dispatch({ op: "catalog" });
+    const fns = cat.functions || [];
+    renderRef(fns);
+    el("refCount").textContent = fns.length + " names";
+    window.__laCatalog = fns;
+  });
+})();
+</script>
+</body>
+</html>
