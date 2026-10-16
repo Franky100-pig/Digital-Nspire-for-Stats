@@ -38,21 +38,32 @@ macOS, not just by reading the classifier.
 
 ## Use it in the browser
 
-`web/` builds a single-page version of the same package: you type calculator
-syntax into a command line and the *real* `tinspire_stats` modules answer, inside
-Pyodide, with nothing to install and nothing uploaded.
+`web/` builds a page that draws the handheld's front panel — chassis, screen,
+touchpad, keypad — and runs the *real* `tinspire_stats` modules inside Pyodide
+behind it, with nothing to install and nothing uploaded.
 
 ```console
-$ python web/build_preview.py          # writes web/dist/  (index.html + two .js files)
+$ python web/fetch_runtime.py          # once: download the interpreter (~13 MB)
+$ python web/build_preview.py          # writes web/dist/
 $ python web/build_preview.py --serve  # ...then serve it on http://127.0.0.1:8000
 ```
 
-`web/dist/index.html` is a plain static page — any web server or GitHub Pages
-branch will do. It has to be served over HTTP (not opened as a file), because
-the browser fetches the Python runtime from a CDN; the first visit pulls about
-11 MB and caches it.
+`web/dist/` is a plain static folder — any web server or GitHub Pages branch
+will do. It has to be served over HTTP (not opened as a file), because the
+browser fetches the interpreter from `runtime/`.
 
-What the page adds on top of the library, because a command line is not the same
+**The interpreter ships with the page, not from a CDN.** The first version
+fetched Pyodide from a public CDN, which worked from a fast connection and did
+not work at all from a throttled one: the endpoints mainland China resets are
+exactly the ones the page was pointed at, so the page drew its whole interface
+and then sat on "Loading the Python runtime" forever with nothing wrong on our
+own server. `web/fetch_runtime.py` puts the interpreter next to the page instead
+— one origin, one connection, no third party that can be blocked independently
+of the site. `la-bridge.js` still knows the CDN addresses, but only as a
+fallback for a checkout that has not run `fetch_runtime.py`; if `./runtime/`
+answers, no third party is contacted.
+
+What the panel adds on top of the library, because a calculator is not the same
 thing as an import:
 
 - `{1,2,3}` is a list, and an argument you skip stays an empty field —
@@ -61,14 +72,22 @@ thing as an import:
   the previous result back, exactly as on the handheld.
 - `countif A,?<3` passes TI's `?` placeholder straight through to
   `make_criteria`.
+- **Arithmetic is the calculator's, not Python's.** `2^3` is 8 — `^` is a power
+  sign here, and in Python it is exclusive-or, which would have answered 1.
+  `6×7`, `10÷4`, `√16`, `3²`, `2π` and `3(4+1)` all mean what the keys say;
+  answers print TI's way too (`1.2E20`, not `1.2e+20`).
 - A command that is deliberately *not* a TI-Nspire name gets told so: type
-  `stdev` and the page answers with the catalog spelling, a one-click
+  `stdev` and the panel answers with the catalog spelling, a one-click
   "run `stDevSamp` instead", and the reason the name is filed where it is.
 - The `stat.results` block is labelled **carried over** when the command you
   just ran did not write it — so a bare `2+2` is never mistaken for a fresh
   computation.
-- The reference rail lists all 84 catalog names with their documented call
-  forms, and marks the three iterative fits.
+- The keypad is laid out as the CX II has it: the touchpad and the esc / ctrl /
+  tab / del cluster, `doc` `menu` `var` and the scratchpad key, the alphabet
+  keys in their alphabetical grid with the Greek letter printed above each one
+  (hold **ctrl** and the next letter types as that Greek letter, which is the
+  handheld's own modifier behaviour), then the symbol row and the numeric pad.
+  A physical keyboard works everywhere instead.
 
 ---
 
@@ -388,11 +407,13 @@ tests/              150 tests: name fidelity, quirks, pinned values, doctests
 tools/              checks_vs_scipy.py -- the numerical cross-check
                     check_readme.py -- runs every example in this file
 examples/tour.py    a printable calculator session
-web/                the single-page browser version (see "Use it in the browser")
+web/                the browser version, drawn as the handheld (see "Use it in
+                    the browser")
   engine.py         command parser: TI argument syntax, session, stat block
-  index.template.html  the page itself (light + dark, no framework)
-  la-bridge.js      Pyodide loader with a three-CDN fallback
-  build_preview.py  bundles the package + page into web/dist/
+  index.template.html  the page itself -- front panel, light + dark, no framework
+  la-bridge.js      Pyodide loader; the interpreter from ./runtime/ first
+  fetch_runtime.py  downloads the interpreter into web/runtime/ (gitignored)
+  build_preview.py  bundles the package + page + interpreter into web/dist/
 ```
 
 ## Running the checks
