@@ -74,7 +74,14 @@ def _jsonable(value, depth=0):
 # Display formatting
 # ==========================================================================
 def _num_text(v: float) -> str:
-    """TI-style: ten significant digits, and integers keep a decimal point."""
+    """A number the way the handheld writes it.
+
+    Ten significant digits, a decimal point on whole numbers, and -- where the
+    value is too big or too small to write out -- TI's own exponent notation,
+    ``1.2E20`` and ``1.E-7``.  Python would say ``1.2e+20`` and ``1e-07``: an
+    extra ``+``, a padded exponent, and a lowercase marker, none of which the
+    calculator prints.
+    """
     if v != v:
         return "NaN"
     if v == math.inf:
@@ -83,7 +90,13 @@ def _num_text(v: float) -> str:
         return "-\u221e"
     if v.is_integer() and abs(v) < 1e16:
         return f"{v:.1f}"
-    return f"{v:.10g}"
+    text = f"{v:.10g}"
+    if "e" in text:
+        mantissa, _, exponent = text.partition("e")
+        if "." not in mantissa:
+            mantissa += "."
+        return f"{mantissa}E{int(exponent)}"
+    return text
 
 
 #: A list longer than this is cut off for display.  The real length still
@@ -242,6 +255,9 @@ def _seed(ns):
         "ln": lambda x: math.log(x) if x > 0 else float("-inf"),
         "log": lambda x: math.log10(x) if x > 0 else float("-inf"),
         "exp": math.exp, "pi": math.pi, "\u03c0": math.pi, "e": math.e,
+        "inf": math.inf, "\u221e": math.inf,
+        "sqrt": math.sqrt, "cbrt": lambda x: math.copysign(abs(x) ** (1 / 3), x),
+        "sign": lambda x: (x > 0) - (x < 0),
     })
 
 
@@ -256,7 +272,7 @@ def _namespace():
 def _eval(text):
     scope = {"__builtins__": _SAFE_BUILTINS}
     scope.update(_namespace())
-    return eval(text, scope)  # noqa: S307 - the user's own browser, sandboxed builtins
+    return eval(_to_python(text), scope)  # noqa: S307 - sandboxed builtins
 
 
 def _stat_sig():
@@ -330,6 +346,66 @@ def _legacy_hint(text):
 # ==========================================================================
 _NUMBER = re.compile(r"^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$")
 _INTEGER = re.compile(r"^[+-]?\d+$")
+
+#: Characters the calculator prints but Python does not understand.
+#:
+#: Two of these are more than cosmetic:
+#:
+#: * ``^`` is a power sign on every calculator ever made and *bitwise xor* in
+#:   Python, so ``2^3`` silently evaluates to 1.  Silently is the problem -- a
+#:   wrong answer beats an error only in how hard it is to notice.
+#: * ``√`` binds to the next number or bracketed group (``√16``, ``√(2+2)``),
+#:   which is not an infix operator and so needs its own pass.
+#:
+#: The rest -- ``×``, ``÷``, ``·``, the Unicode minus, ``≤``, ``≥``, ``≠``,
+#: ``π``, ``²`` -- are what the keypad above actually prints on its keys, and
+#: typing them should work for the same reason the function names do: what you
+#: type should be what the handheld would accept.
+_TI_GLYPHS = (
+    ("\u00d7", "*"),    # multiplication sign
+    ("\u22c5", "*"),    # dot operator
+    ("\u00b7", "*"),    # middle dot
+    ("\u00f7", "/"),    # division sign
+    ("\u2212", "-"),    # minus sign (not hyphen)
+    ("\u2013", "-"),    # en dash
+    ("\u2264", "<="),   # less-than-or-equal
+    ("\u2265", ">="),   # greater-than-or-equal
+    ("\u2260", "!="),   # not equal
+    ("\u221e", "inf"),  # infinity
+    ("\u03c0", "pi"),   # pi
+    ("\u221a", "sqrt"),  # radical, after its operand has been bracketed
+)
+
+#: Superscript digits, which the handheld writes as ``x²``.
+_SUPERSCRIPT = {
+    "\u00b2": "2", "\u00b3": "3", "\u2074": "4",
+    "\u2075": "5", "\u2076": "6", "\u2077": "7",
+}
+
+
+def _to_python(text: str) -> str:
+    """Rewrite calculator notation as the Python it means.
+
+    Applied only on the way to ``eval``: tokens that are handed to a function as
+    text (criteria such as ``?<5``, quoted strings) never come through here, so
+    ``≤`` still reaches ``make_criteria`` as itself.
+    """
+    # √ swallows the following group or number, so bracket it first.
+    text = re.sub(r"\u221a\s*\(([^()]*)\)", r"sqrt(\1)", text)
+    text = re.sub(r"\u221a\s*(\d+(?:\.\d+)?)", r"sqrt(\1)", text)
+    # Implicit multiplication, as on the handheld: 2π and 3(4+1) both mean a
+    # product.  Kept deliberately narrow -- a digit or a closing bracket before
+    # π, ∞ or an opening bracket -- because a general rule would start eating
+    # function names.
+    text = re.sub(r"(\d)\s*(?=[\u03c0\u221e])", r"\1*", text)
+    text = re.sub(r"(\d|\))\s*\(", r"\1*(", text)
+    for glyph, plain in _TI_GLYPHS:
+        text = text.replace(glyph, plain)
+    # ^ is power here, not xor.  Leave an existing ** alone.
+    text = re.sub(r"(?<!\*)\^(?!\*)", "**", text)
+    for glyph, digit in _SUPERSCRIPT.items():
+        text = re.sub(r"([A-Za-z0-9_)\]])\s*" + glyph, r"\1**" + digit, text)
+    return text
 
 
 def _split_top(text, sep=","):
@@ -416,7 +492,7 @@ def _literal(token):
         return text
     if re.match(r"^(<=|>=|!=|[<>\u2264\u2265\u2260])", text):
         return text  # the guide's bare relational shorthand, e.g. '>4'
-    return eval(text, dict(_namespace()))  # noqa: S307 - the user's own browser
+    return eval(_to_python(text), dict(_namespace()))  # noqa: S307 - the user's own browser
 
 
 def _find_call(text):
@@ -473,7 +549,7 @@ def _error(exc, signature=None):
         if isinstance(exc, NameError):
             message = f"{detail} -- a bare name has to be a function, or something you defined earlier."
         elif isinstance(exc, SyntaxError):
-            message = f"{detail} -- check the commas; on this page a list is {{1,2,3}}."
+            message = f"{detail} -- check the commas; a list is {{1,2,3}}."
         payload = {"ok": False, "error": {"kind": kind, "message": message, "detail": detail, "ti": False}}
     if signature:
         payload["error"]["signature"] = signature
@@ -580,7 +656,7 @@ def _op_run(payload):
 
     # 4. anything else is an expression, evaluated against the live session
     try:
-        value = eval(text, dict(_namespace()))  # noqa: S307
+        value = eval(_to_python(text), dict(_namespace()))  # noqa: S307
     except Exception as exc:
         return _error(exc)
     return _result_payload(value, text, "", text, before)
