@@ -229,6 +229,8 @@ from .inference import (
 # catalogue helpers
 # --------------------------------------------------------------------------
 from .catalog import (
+    MENU,
+    OFF_MENU,
     ascii_name,
     catalog,
     lookup,
@@ -239,6 +241,7 @@ from .catalog import (
 
 #: Submodule holding every name that is *not* a faithful TI-Nspire name.
 from . import legacy  # noqa: E402  (imported last: it pulls in every module)
+from . import menu  # noqa: E402  (the keypad's maps, not the catalogue's)
 
 __version__ = "1.0.0"
 
@@ -314,6 +317,9 @@ __all__ = [
     "chi2GOF", "χ2GOF", "chi22way", "χ22way", "ANOVA", "ANOVA2way",
     "NAME_SUPERSETS",
     # catalogue
+    "MENU", "OFF_MENU",
     "ascii_name", "ti_spelling", "catalog", "lookup", "menu_tree",
     "pretty_catalog", "legacy", "ROOT_ALIASES",
+    # the keypad's menus
+    "menu",
 ]
