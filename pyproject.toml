@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tinspire-stats"
+version = "1.0.0"
+description = "A TI-Nspire statistics suite in pure Python, with the calculator's own function and stat.* variable names"
+readme = "README.md"
+# Verified down to the system Python on a stock macOS 15 (3.9.6): the package
+# imports, and OneVar / LinRegMx / tInterval / tTest_2Samp / ANOVA / chi2GOF all
+# return the same values they do on 3.13.
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = [
+    "ti-nspire", "texas-instruments", "statistics", "calculator",
+    "regression", "distributions", "hypothesis-testing", "anova", "chi-square",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Education",
+]
+# Deliberately empty: the whole point is that this replicates the calculator
+# with the standard library and nothing else.  SciPy is only a test dependency.
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=7", "numpy>=1.24", "scipy>=1.10"]
+
+[project.urls]
+Homepage = "https://github.com/Franky100-pig/Digital-Nspire-for-Stats"
+Source = "https://github.com/Franky100-pig/Digital-Nspire-for-Stats"
+Issues = "https://github.com/Franky100-pig/Digital-Nspire-for-Stats/issues"
+
+[tool.setuptools]
+packages = ["tinspire_stats"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
