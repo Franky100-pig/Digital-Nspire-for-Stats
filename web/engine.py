@@ -26,7 +26,7 @@ import math
 import re
 import traceback
 
-from tinspire_stats import legacy, menu, stat
+from tinspire_stats import legacy, menu, sheet, stat
 from tinspire_stats.catalog import catalog as _catalog
 from tinspire_stats.statvar import StatGroup
 
@@ -266,6 +266,20 @@ def _namespace():
         _seed(_NS)
     for key, fn in _funcs().items():
         _NS.setdefault(key, fn)
+    # The Lists & Spreadsheet page's named columns are list variables on the
+    # Calculator page -- that is the entire reason to name a column, and the
+    # booklet's own example turns `mshoe` into {11,8,7,12,9.5,...}.  Refreshed
+    # on every lookup rather than stored once, so editing a named column on the
+    # grid is visible here immediately and a column that loses its name stops
+    # being a variable.  Functions are already in place and a column may not
+    # take one of their names, so this cannot silently shadow a function.
+    #
+    # Read from the state rather than through ``_grid()`` on purpose: opening
+    # the grid asks for this namespace, so calling back into it here would
+    # recurse.  No grid open means nothing to merge, which is the right answer.
+    grid = _STATE.get("sheet")
+    if grid is not None:
+        _NS.update(grid.bindings())
     return _NS
 
 
@@ -273,6 +287,47 @@ def _eval(text):
     scope = {"__builtins__": _SAFE_BUILTINS}
     scope.update(_namespace())
     return eval(_to_python(text), scope)  # noqa: S307 - sandboxed builtins
+
+
+#: Rows in a fresh spreadsheet.  TI opens to a screenful, not to the maximum.
+_DEFAULT_ROWS = 20
+
+
+def _grid():
+    """The open spreadsheet, created on first use.
+
+    One per session, like the page: closing the document is what ``reset``
+    does.  Where the Calculator page already has this name, this is where that
+    promise is kept -- the named columns go back (see ``_namespace``) and the
+    session's variables come in.
+    """
+    grid = _STATE.get("sheet")
+    if grid is None:
+        grid = sheet.Sheet(rows=_DEFAULT_ROWS)
+        _STATE["sheet"] = grid
+    _link_session_variables(grid)
+    return grid
+
+
+def _link_session_variables(grid):
+    """Let a cell formula use the variables this session has stored.
+
+    Refreshed before every use rather than once at creation, because a variable
+    stored on the Calculator page *after* the sheet was opened still has to be
+    visible to a formula -- that is what "linked" means on the device.
+
+    A list is wrapped as a ``TiList`` so that ``=mshoe*2`` doubles each element
+    the way the handheld does.  A plain Python list would repeat it instead,
+    which is the kind of quietly wrong answer this whole exercise is against.
+    """
+    environment = dict(sheet.statistics_functions())
+    owned = set(grid.names())
+    for name, value in _namespace().items():
+        if callable(value) or name in owned:
+            continue
+        environment[name] = (sheet.TiList(value) if isinstance(value, list)
+                             else value)
+    grid.environment = environment
 
 
 def _stat_sig():
@@ -746,15 +801,104 @@ def _op_catalog(_payload):
         #: The function the menu reaches for stat.results, so the screen can
         #: tell that leaf apart from a callable without hard-coding a string.
         "statResults": menu.STAT_RESULTS,
+        #: The prefix the menu uses for a spreadsheet action rather than a
+        #: function, so the screen does not have to know the convention.
+        "sheetPrefix": menu.SHEET_PREFIX,
+        "sheet": _grid().snapshot(),
     }
 
 
+def _op_sheet(payload):
+    """The spreadsheet page: read the grid, edit it, or act on it.
+
+    ``action`` is one of ``snapshot``, ``cell``, ``formula``, ``name``,
+    ``clear`` or ``action``.  The last one is how a menu key reaches the grid:
+    the payload carries the ``sheet.<method>`` name the menu resolved to, and
+    the arguments the dialog collected.
+
+    Every answer carries the whole snapshot back, grid and variable list
+    together, because a single edit can change both -- naming a column changes
+    what the Calculator page can see, and typing into a cell changes what a
+    named column is worth.
+    """
+    payload = payload or {}
+    grid = _grid()
+    action = str(payload.get("action", "snapshot"))
+    try:
+        if action == "cell":
+            _require(payload, "column", "row")
+            grid.set_cell(payload["column"], payload["row"], payload.get("text", ""))
+        elif action == "formula":
+            _require(payload, "column")
+            grid.set_formula(payload["column"], payload.get("text", ""))
+        elif action == "name":
+            _require(payload, "column")
+            grid.set_name(payload["column"], payload.get("text", ""))
+        elif action == "clear":
+            grid.clear_all()
+        elif action == "action":
+            _run_grid_action(grid, payload)
+        elif action != "snapshot":
+            return {"ok": False, "error": {
+                "kind": "UnknownSheetAction",
+                "message": f"Unknown spreadsheet action {action!r}.",
+                "ti": False,
+            }}
+    except sheet.SheetError as exc:
+        # A refused edit is the device's own message, and the grid is unchanged,
+        # so send it back with the grid still in the answer.
+        return {
+            "ok": False,
+            "error": {"kind": "SheetError", "message": exc.ti_message, "ti": True},
+            "sheet": grid.snapshot(),
+        }
+    except (KeyError, TypeError, ValueError) as exc:
+        return {"ok": False, "error": {
+            "kind": type(exc).__name__,
+            "message": f"That edit could not be made: {exc}",
+            "ti": False,
+        }}
+    return {"ok": True, "sheet": grid.snapshot(), "bindings": grid.bindings()}
+
+
+def _require(payload, *names):
+    for name in names:
+        if payload.get(name) in (None, ""):
+            raise ValueError(f"{name} is missing")
+
+
+def _run_grid_action(grid, payload):
+    """Run one of the grid actions the menu resolves to.
+
+    The name has to be one the menu actually offers, and it has to name a
+    public method on the grid.  Without both checks this would be a way to call
+    anything at all on the object from a payload.
+    """
+    name = str(payload.get("name", ""))
+    if not menu.is_sheet_op(name):
+        raise ValueError(f"{name!r} is not a spreadsheet action")
+    method = name[len(menu.SHEET_PREFIX):]
+    if method.startswith("_") or not method.isidentifier():
+        raise ValueError(f"{name!r} is not a spreadsheet action")
+    target = getattr(grid, method, None)
+    if not callable(target):
+        raise ValueError(f"{name!r} is not a spreadsheet action")
+    return target(*payload.get("args", []), **payload.get("kwargs", {}))
+
+
 def _op_reset(_payload):
-    """Back to a blank calculator: no stored variables, no leftover results."""
+    """Back to a blank calculator: no stored variables, no leftover results.
+
+    The spreadsheet goes too.  On the device these are separate pages of one
+    document, so "clear the session" that left a grid full of data behind would
+    be a lie about what it had done.
+    """
     _NS.clear()
     _seed(_NS)
     stat.publish({})
-    return {"ok": True, "message": "Session cleared."}
+    _STATE.pop("sheet", None)
+    return {"ok": True, "message": "Session cleared.",
+            "sheet": _grid().snapshot()}
 
 
 def _la_dispatch(payload):
@@ -770,6 +914,8 @@ def _la_dispatch(payload):
             return _op_catalog(payload)
         if op == "menu":
             return _op_menu(payload)
+        if op == "sheet":
+            return _op_sheet(payload)
         if op == "reset":
             result = _op_reset(payload)
             _STATE["last_input"] = None
