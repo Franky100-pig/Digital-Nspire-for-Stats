@@ -43,14 +43,18 @@ from ._core import (
 # The names TI documents for the stat. group.
 # Source: reference-guide page "S" -> stat.results (the table of variable names
 # used for statistical analysis).
+#
+# The guide renders the proportion estimate with the TI-84 key font, whose
+# glyph comes out of the webhelp as the character ``Ç``.  The variable is
+# p-hat, so that is how it is spelled here; ``Ç`` still resolves as an alias.
 # --------------------------------------------------------------------------
 DOCUMENTED_STAT_NAMES = frozenset(
     """
-    a AdjR² b b0 b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 bList χ² c CLowerList CompList
-    CompMatrix CookDist CLower CUpper d dfDenom dfBlock dfCol dfError dfInteract
-    dfReg dfNumer dfRow DW e ExpMatrix F FBlock Fcol FInteract FreqReg Frow
-    Leverage LowerPred LowerVal m MaxX MaxY ME MedianX MedianY MEPred MinX MinY MS
-    MSBlock MSCol MSError MSInteract MSReg MSRow n Ç Ç1 Ç2 ÇDiff PList PVal
+    a AdjR² b b0 b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 bList χ² c CLowerList CUpperList
+    CompList CompMatrix CookDist CLower CUpper d dfDenom dfBlock dfCol dfError
+    dfInteract dfReg dfNumer dfRow DW e ExpMatrix F FBlock Fcol FInteract FreqReg
+    Frow Leverage LowerPred LowerVal m MaxX MaxY ME MedianX MedianY MEPred MinX
+    MinY MS MSBlock MSCol MSError MSInteract MSReg MSRow n p̂1 p̂2 p̂Diff PList PVal
     PValBlock PValCol PValInteract PValRow Q1X Q1Y Q3X Q3Y r r² RegEqn Resid
     ResidTrans σx σy σx1 σx2 Σx Σx² Σxy Σy Σy² s SE SEList SEPred sResid SEslope
     sp SS SSBlock SSCol SSX SSY SSError SSInteract SSReg SSRow tList UpperPred
@@ -61,41 +65,60 @@ DOCUMENTED_STAT_NAMES = frozenset(
 #: The reference guide prints the same variable two ways on different pages.
 #: Both spellings are resolved here; the value on the right is what we emit.
 #:
-#: Three distinct causes, all real:
+#: Four distinct causes, all real:
 #:
 #: 1. **Web-rendered superscripts.**  ``stat.Σx²`` is printed ``stat.Σx2`` in the
 #:    per-function tables because the HTML table lost the superscript.  Same for
-#:    ``Σy²``, ``χ²``, ``AdjR²``.
-#: 2. **Typographic twins.**  ``stat.r²`` vs ``stat.r2``, ``stat.P Value`` vs
-#:    ``stat.PVal``, ``stat.ExpMat`` vs ``stat.ExpMatrix``.
-#: 3. **Reference-guide edition drift.**  The printed Reference Guide says
-#:    ``stat.MedY`` where the current online guide says ``stat.MedianY``, and
-#:    ``stat.Frow`` where the online guide says ``stat.FRow``.
+#:    ``Σy²``, ``Σ(x-v)²``, ``χ²``, ``AdjR²``.
+#: 2. **Key-font glyphs.**  ``stat.Ç`` is the p-hat symbol drawn through the
+#:    TI-84 key font.
+#: 3. **Damaged cells.**  ``stat.P Value``, ``stat.UpperrPred`` and
+#:    ``stat.σ `` (trailing space) are single characters lost in conversion.
+#: 4. **Drift between the guide's pages.**  The TwoVar table says ``stat.MedY``
+#:    while the stat.results name list says ``stat.MedianY``, and the
+#:    chi-square table says ``stat.ExpMat`` while the name list says
+#:    ``stat.ExpMatrix``.  The name list wins on spelling; see
+#:    :mod:`tinspire_stats._refguide` for the full table of decisions.
 DUPLICATE_SPELLINGS = {
     "ExpMat": "ExpMatrix",
     "CompMat": "CompMatrix",
     "MedY": "MedianY",
     "P Value": "PVal",
     "LowerrPred": "LowerPred",
+    "UpperrPred": "UpperPred",
     "Sigmax": "Σx",
     "x2": "Σx²",
     "Σx2": "Σx²",
     "Sigmay2": "Σy²",
     "Σy2": "Σy²",
     "r2": "r²",
+    "R2": "R²",
     "AdjR2": "AdjR²",
     "χ2": "χ²",
     "Frow": "FRow",
     "p-value": "PVal",
+    "Ç": "p̂",
+    "Ç1": "p̂1",
+    "Ç2": "p̂2",
+    "ÇDiff": "p̂Diff",
+    "phat": "p̂",
+    "Sigmaywv2": "Σ(y-w)²",
+    "Σ(y-w)2": "Σ(y-w)²",
+    "Σ(x-v)2": "Σ(x-v)²",
+    "Sigmayw2": "Σ(y-w)²",
+    "Sigmaxv2": "Σ(x-v)²",
 }
 
-#: Extra names the guide's output tables use that are not in the master list
-#: above (per-function tables occasionally disagree with the master table).
+#: Extra names the guide's *per-procedure* output tables use that are not in
+#: the master list above.  That list is a warning about name collisions rather
+#: than a complete inventory -- it does not list ``stat.df`` either, and eight
+#: procedures publish it -- so the per-procedure tables are the authority for
+#: what exists, and this is where their names are accounted for.
 EXTRA_STAT_NAMES = frozenset(
     """
     sx sy sx1 sx2 σx1 σx2 σ x1_bar x2_bar x1 x2 x1-x2 v1-v2 Sp SpList yList1
-    xbarlist CLowerList CUpperList df df_slope z x r1 r2 p0 R2 AdjR2
-    Σ(x-v)2 Σ(y-w)2 yhat
+    xbarlist CLowerList CUpperList df df_slope z x r1 r2 p0 t R² AdjR2 p̂ FRow
+    SESlope n1 n2 Σ(x-v)² Σ(y-w)² yhat
     """.split()
 )
 
@@ -110,16 +133,15 @@ ASCII_ALIASES = {
     "Sigmay": "Σy",
     "Sigmay2": "Σy²",
     "Sigmaxy": "Σxy",
-    "Sigmaxv2": "Σ(x-v)2",
-    "Sigmayw2": "Σ(y-w)2",
+    "Sigmaywv2": "Σ(y-w)²",
     "sigmax": "σx",
     "sigmay": "σy",
-    "pbar": "Ç",
-    "pbar1": "Ç1",
-    "pbar2": "Ç2",
-    "pbarDiff": "ÇDiff",
+    "pbar": "p̂",
+    "pbar1": "p̂1",
+    "pbar2": "p̂2",
+    "pbarDiff": "p̂Diff",
+    "phat": "p̂",
     "chi2": "χ²",
-    "R2": "R2",
 }
 
 
@@ -338,35 +360,54 @@ class StatGroup:
 
     # -- population --------------------------------------------------------
     def publish(self, mapping: dict) -> "StatGroup":
-        """Replace the group with the results of the latest calculation."""
+        """Replace the group with the results of the latest calculation.
+
+        Names that start with an underscore are dropped.  They are the
+        implementation's own bookkeeping, and the handheld has no such line on
+        its ``stat.results`` screen -- a helper called ``_summary`` appearing
+        there would be a name the device does not have.
+        """
         self._d.clear()
         self._order.clear()
         for k, v in mapping.items():
+            if _str(k).startswith("_"):
+                continue
             self._d[k] = v
             self._order.append(k)
-        object.__setattr__(self, "results", StatResults([(k, self._d[k]) for k in self._order]))
-        # stat.values: the same numbers, names stripped off
-        vals = []
-        for k in self._order:
-            v = self._d[k]
-            if _isinstance(v, (int, float)) and not _isinstance(v, bool):
-                vals.append(_float(v))
-        object.__setattr__(self, "values", vals)
+        self._republish()
         return self
 
     def update(self, mapping: dict) -> "StatGroup":
         """Add results without clearing (used by the multi-list forms)."""
         for k, v in mapping.items():
+            if _str(k).startswith("_"):
+                continue
             if k not in self._d:
                 self._order.append(k)
             self._d[k] = v
-        object.__setattr__(self, "results", StatResults([(k, self._d[k]) for k in self._order]))
-        object.__setattr__(
-            self,
-            "values",
-            [_float(self._d[k]) for k in self._order if _isinstance(self._d[k], float)],
-        )
+        self._republish()
         return self
+
+    def _republish(self) -> None:
+        """Rebuild the derived views after the group changed.
+
+        ``stat.values`` is the numbers from the group with the names stripped
+        off, so it keeps only the scalars.  A list-valued result -- ``stat.bList``
+        after ``MultRegTests``, the matrices after a chi-square -- is part of
+        ``stat.results`` and is readable by name, but it is not one of the
+        numbers.  Coercing it to float is what turned those procedures into a
+        ``TypeError``.
+        """
+        object.__setattr__(
+            self, "results", StatResults([(k, self._d[k]) for k in self._order]))
+        vals = []
+        for k in self._order:
+            v = self._d[k]
+            if _isinstance(v, bool):
+                continue
+            if _isinstance(v, (int, float)):
+                vals.append(_float(v))
+        object.__setattr__(self, "values", vals)
 
     # -- reading -----------------------------------------------------------
     def __getattr__(self, name):
