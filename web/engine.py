@@ -26,7 +26,7 @@ import math
 import re
 import traceback
 
-from tinspire_stats import legacy, stat
+from tinspire_stats import legacy, menu, stat
 from tinspire_stats.catalog import catalog as _catalog
 from tinspire_stats.statvar import StatGroup
 
@@ -599,6 +599,21 @@ def _op_run(payload):
     _namespace()  # so _legacy_hint can tell a typo from a variable you defined
     before = _stat_sig()
 
+    # 0. stat.results -- the variable the Statistics menu's own second line
+    #    inserts.  It asks for the block that is already there, so it is not
+    #    "carried over": it was requested by name.
+    if text == menu.STAT_RESULTS:
+        rows = [_row(k, stat[k]) for k in stat.keys()]
+        return {
+            "ok": True,
+            "label": menu.STAT_RESULTS,
+            "doc": "",
+            "input": text,
+            "summary": None,
+            "carry": False,
+            "vars": rows,
+        }
+
     # 1. assignment -- keeps a value for the rest of the session
     target, rhs = _split_assignment(text)
     if target is not None and re.fullmatch(r"\s*[A-Za-z_][A-Za-z0-9_]*\s*", target):
@@ -662,8 +677,76 @@ def _op_run(payload):
     return _result_payload(value, text, "", text, before)
 
 
+def _menu_apps():
+    return [
+        {"key": key, "label": label, "statisticsKey": _statistics_key(key)}
+        for key, (label, _tree) in sorted(menu.APPS.items())
+    ]
+
+
+def _statistics_key(app):
+    """Which top-level key opens Statistics in this application's menu."""
+    _label, tree = menu.APPS[app]
+    for position, item in enumerate(tree):
+        if item.label == "Statistics":
+            return menu.KEYS[position]
+    return None
+
+
+def _op_menu(payload):
+    """Resolve a menu path.
+
+    The screen asks this every time a key is pressed.  A key the menu does not
+    offer comes back as an error rather than as a wrong answer, because the
+    handheld's own response is to ignore it -- the menu stays where it is.
+    """
+    payload = payload or {}
+    path = payload.get("path", [])
+    if isinstance(path, str):
+        path = list(path)
+    try:
+        found = menu.resolve(payload.get("app", "calculator"), path)
+    except menu.MenuError as exc:
+        return {
+            "ok": False,
+            "error": {
+                "kind": "MenuKey",
+                "message": f"There is no {exc.key} on this menu.",
+                "detail": str(exc),
+                "key": exc.key,
+                "where": exc.where,
+                "ti": False,
+            },
+        }
+
+    app_key = menu.app_key(payload.get("app", "calculator"))
+    out = {
+        "ok": True,
+        "kind": found.kind,
+        "app": app_key,
+        "appLabel": menu.APPS[app_key][0],
+        "title": found.title,
+        "path": list(found.path),
+        "breadcrumb": list(found.breadcrumb),
+        "label": found.label,
+        "function": found.function,
+    }
+    if found.kind == "menu":
+        out["items"] = [
+            {"key": c.key, "label": c.label, "kind": c.kind} for c in found.choices
+        ]
+    return out
+
+
 def _op_catalog(_payload):
-    return {"ok": True, "functions": _registry()}
+    return {
+        "ok": True,
+        "functions": _registry(),
+        "apps": _menu_apps(),
+        #: The function the menu reaches for stat.results, so the screen can
+        #: tell that leaf apart from a callable without hard-coding a string.
+        "statResults": menu.STAT_RESULTS,
+    }
 
 
 def _op_reset(_payload):
@@ -685,6 +768,8 @@ def _la_dispatch(payload):
             return result
         if op == "catalog":
             return _op_catalog(payload)
+        if op == "menu":
+            return _op_menu(payload)
         if op == "reset":
             result = _op_reset(payload)
             _STATE["last_input"] = None

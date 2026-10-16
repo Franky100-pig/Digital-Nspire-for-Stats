@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="la-entry-module" content="{{ENTRY_MODULE}}">
 <title>TI-Nspire CX II Statistics &mdash; in the browser</title>
-<meta name="description" content="A TI-Nspire CX II front panel for the statistics functions, running the real Python package in your browser. 84 catalog names, spelled as the guide spells them.">
+<meta name="description" content="A TI-Nspire CX II front panel for the statistics functions, with the handheld's own menus, running the real Python package in your browser. 84 catalog names, spelled as the guide spells them.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23353b44'/%3E%3Crect x='5' y='6' width='22' height='13' rx='2' fill='%23eef2f5'/%3E%3Crect x='5' y='23' width='22' height='4' rx='2' fill='%23e8912f'/%3E%3C/svg%3E">
 <style>
 /* ==========================================================================
@@ -180,7 +180,7 @@ body.engine-failed .status{color:var(--bad); background:var(--bad-soft); border-
    the calculator's own coordinates instead of approximating them. */
 .lcd-in{
   width:320px; height:240px; transform:scale(calc(var(--sw) / 320));
-  transform-origin:top left;
+  transform-origin:top left; position:relative;
   display:flex; flex-direction:column;
   font-family:var(--mono); font-size:11px; line-height:1.32; color:var(--lcd-ink);
   background:var(--lcd);
@@ -259,6 +259,43 @@ body.engine-failed .status{color:var(--bad); background:var(--bad-soft); border-
 .empty code{font-family:var(--mono); color:var(--lcd-ink)}
 .empty ul{margin:3px 0 0; padding-left:13px}
 .empty li{margin:1px 0}
+
+/* --- the menu the menu key drops down ---
+   Drawn inside the 320x240 screen so it scales with it, and drawn over the
+   page the way the handheld draws it: the menu covers the page, it does not
+   push it down. */
+.menu-pop{
+  position:absolute; left:3px; top:16px; z-index:8;
+  min-width:132px; max-width:250px; max-height:214px;
+  display:flex; flex-direction:column;
+  background:var(--lcd); color:var(--lcd-ink);
+  border:1px solid var(--lcd-ink);
+  box-shadow:2px 2px 0 rgba(0,0,0,.22);
+  font-size:10px; line-height:1.24;
+}
+.menu-pop[hidden]{display:none}
+.menu-head{
+  flex:0 0 auto; padding:1px 4px; font-size:8.5px; color:var(--lcd-dim);
+  border-bottom:1px solid var(--lcd-rule);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.menu-list{flex:1 1 auto; min-height:0; margin:0; padding:1px 0; list-style:none; overflow-y:auto}
+.menu-list::-webkit-scrollbar{width:4px}
+.menu-list::-webkit-scrollbar-track{background:transparent}
+.menu-list::-webkit-scrollbar-thumb{background:var(--lcd-rule); border-radius:99px}
+.menu-list li{display:flex; gap:4px; padding:1px 4px; white-space:nowrap; cursor:pointer}
+.menu-list li .mk{color:var(--lcd-dim); min-width:7px}
+/* the selected line is drawn inverted, the way the handheld marks it */
+.menu-list li.on{background:var(--lcd-ink); color:var(--lcd)}
+.menu-list li.on .mk{color:var(--lcd)}
+.menu-foot{
+  flex:0 0 auto; padding:1px 4px; font-size:8.5px; color:var(--lcd-dim);
+  border-top:1px solid var(--lcd-rule);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+/* a key the menu does not offer: the menu stays put and flashes */
+.menu-pop.deny{animation:deny .16s 2}
+@keyframes deny{50%{background:var(--bad-soft); border-color:var(--bad)}}
 
 /* --- keypad --- */
 .pad{
@@ -386,6 +423,11 @@ body.engine-failed .status{color:var(--bad); background:var(--bad-soft); border-
 }
 .chip-btn:hover{color:var(--accent); border-color:var(--accent); background:var(--accent-soft)}
 .chip-btn.var{color:var(--good); border-color:transparent; background:var(--good-soft)}
+.chip-btn[aria-pressed="true"]{
+  color:var(--accent); border-color:var(--accent); background:var(--accent-soft); font-weight:600;
+}
+.chips.pages{margin-top:-4px}
+.chips.pages .hint{font-size:11px; color:var(--ink-faint); font-family:var(--mono)}
 
 footer{
   border-top:1px solid var(--line); padding:16px clamp(14px,3vw,30px) 26px; color:var(--ink-faint);
@@ -402,7 +444,7 @@ footer a{color:var(--ink-soft)}
   <div class="brand">
     <div>
       <h1>TI-Nspire CX II &mdash; statistics</h1>
-      <p>Type what you would type on the handheld. The calculator's own keys work.</p>
+      <p>Type what you would type on the handheld, or press <b>menu</b> and walk its menus.</p>
     </div>
   </div>
   <span class="spacer"></span>
@@ -442,6 +484,7 @@ footer a{color:var(--ink-soft)}
                      placeholder="OneVar {1,2,4,8,16}" aria-label="TI-Nspire command line">
               <button class="hidden-submit" type="submit" tabindex="-1" aria-hidden="true">Run</button>
             </form>
+            <div class="menu-pop" id="menuPop" role="listbox" aria-label="Calculator menu" hidden></div>
           </div>
         </div>
       </div>
@@ -470,6 +513,12 @@ footer a{color:var(--ink-soft)}
       </div>
     </div>
 
+    <div class="chips pages">
+      <span class="lead">Page:</span>
+      <span id="appButtons"></span>
+      <span class="hint" id="pageHint"></span>
+    </div>
+
     <div class="chips">
       <span class="lead">Try:</span>
       <span id="exampleChips"></span>
@@ -489,7 +538,9 @@ footer a{color:var(--ink-soft)}
   <p id="footNote">
     The front panel follows the TI&#8209;Nspire CX&nbsp;II layout; the keys and their names are from TI's
     handheld key reference. Function names, argument order and the <code>stat.</code> result names are
-    copied from the TI&#8209;Nspire Reference Guide.
+    copied from the TI&#8209;Nspire Reference Guide. The <code>menu</code> key walks the handheld's own
+    menus &mdash; numbering included &mdash; so <code>4&nbsp;1&nbsp;1</code> lands on One-Variable
+    Statistics the way it does on the device.
   </p>
   <p>
     Everything runs in your browser and nothing is uploaded. The Python interpreter is served from
@@ -544,6 +595,17 @@ footer a{color:var(--ink-soft)}
     "  2\u03c0   3(4+1)          implicit multiplication works",
     "  1.2E20  1.E-7           TI exponent notation, both ways",
     "",
+    "The menu key opens this page's own menu:",
+    "",
+    "  menu  4 1 1     Lists & Spreadsheet page -> One-Variable Statistics",
+    "  menu  6 1 1     Calculator page          -> the same function",
+    "  menu  4 5 A     Distributions -> F Pdf, then ?  (item 10 is A)",
+    "  menu  4 2       Stat Results, the stat. block the menu reaches",
+    "  esc            closes the menu; \u25c2 backs up one level",
+    "",
+    "Categories outside statistics are on the menu with their real numbers",
+    "and say so when you press them.",
+    "",
     "On the keypad: ctrl then a letter gives its Greek letter,",
     "del deletes, \u25b8\u203a starts a fresh page, and Reset clears everything."
   ].join("\n");
@@ -597,6 +659,19 @@ footer a{color:var(--ink-soft)}
 
   let history = [], hIndex = 0, busy = false, greekNext = false;
   const variables = new Set();
+
+  /* ---------- the menu key ----------
+     `menu` opens the menu of whichever application is on the page, and the two
+     applications that hold statistics lay them out differently: the path
+     people remember, 4 1 1, is the Lists & Spreadsheet page's; a Calculator
+     page reaches the same function with 6 1 1.  Both menus are modelled by the
+     Python side, so this file never hard-codes a menu item. */
+  const MENU_KEYS = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let menuState = null;     // {app, path:[...], res:{...}} while a menu is open
+  let menuSel = 0;          // the highlighted line
+  let menuFootTimer = 0;    // puts the footer line back after a refused key
+  let currentApp = "listssheet";
+  let appsInfo = [], statResultsName = "stat.results";
 
   /* ---------- keypad construction ---------- */
   // Built with the DOM rather than an HTML string: key text includes characters
@@ -719,6 +794,34 @@ footer a{color:var(--ink-soft)}
     screen.scrollTop = screen.scrollHeight;
   }
 
+  /* The menu is the handheld's, so it reaches past statistics into categories
+     this package does not cover (Calculus, Finance, ...).  Those are real
+     entries with real numbers and they say so instead of quietly doing
+     nothing. */
+  function addUnsupported(res) {
+    const empty = el("emptyState");
+    if (empty) empty.remove();
+    const node = document.createElement("article");
+    node.className = "ent";
+    // The whole path, ending on the line that was pressed -- "Lists & Spreadsheet
+    // > Actions" says more than the application name on its own.
+    const crumb = (res.breadcrumb || []).concat(res.label ? [res.label] : []).join(" > ");
+    node.innerHTML =
+      '<div class="in"><span class="arrow">&#9656;</span><span>menu ' +
+      esc((res.path || []).join(" ")) + "</span></div>" +
+      '<div class="dlg"><div class="dlg-t">' + esc(res.label || "Menu") + "</div>" +
+      '<div class="dlg-b">Not supported yet.' +
+      (crumb ? '<br><span class="k">' + esc(crumb) + "</span>" : "") + "</div>" +
+      '<div class="dlg-f"><button type="button" class="ok">OK</button></div></div>';
+    screen.appendChild(node);
+    screen.scrollTop = screen.scrollHeight;
+  }
+
+  function engineNotReady() {
+    addEntry("menu", { ok: false, error: { kind: "NotReady",
+      message: "The Python engine is still loading. Give it a moment, then press menu again." } });
+  }
+
   function clearScreen(message) {
     screen.innerHTML = '<div class="empty" id="emptyState">' + message + "</div>";
   }
@@ -766,18 +869,153 @@ footer a{color:var(--ink-soft)}
     history.push(text); hIndex = history.length;
   }
 
+  /* ---------- walking the menu ---------- */
+  function askMenu(app, path) {
+    try {
+      return window.LA.dispatch({ op: "menu", app: app, path: path });
+    } catch (err) {
+      return { ok: false, error: { kind: "BridgeError", message: String(err) } };
+    }
+  }
+
+  function appLabel(key) {
+    const found = appsInfo.find((a) => a.key === key);
+    return found ? found.label : key;
+  }
+
+  function openMenu(app, path) {
+    if (!window.LA.ready) { engineNotReady(); return; }
+    const r = askMenu(app || currentApp, path || []);
+    if (!r.ok) { closeMenu(); addEntry("menu", r); return; }
+    showMenu(r);
+  }
+
+  function closeMenu() {
+    menuState = null;
+    menuSel = 0;
+    clearTimeout(menuFootTimer);
+    el("menuPop").hidden = true;
+  }
+
+  function showMenu(r) {
+    menuState = { app: r.app, path: r.path.slice(), res: r };
+    menuSel = 0;
+    drawMenu();
+  }
+
+  /* A function leaf is pasted into the entry line, not run: on the handheld,
+     picking One-Variable Statistics writes the call and then asks for the
+     arguments.  stat.results is the exception -- it is a variable, it takes no
+     arguments, and pasting it alone would look like nothing happened. */
+  function takeMenuFunction(res) {
+    closeMenu();
+    if (res.function === statResultsName) { run(statResultsName); return; }
+    cmd.value = res.function + " ";
+    const at = cmd.value.length;
+    cmd.setSelectionRange(at, at);
+    cmd.focus();
+  }
+
+  function pickMenuKey(key) {
+    if (!menuState) return;
+    const r = askMenu(menuState.app, menuState.path.concat(key));
+    if (!r.ok) { denyMenu(r); return; }
+    if (r.kind === "menu") { showMenu(r); return; }
+    if (r.kind === "function") { takeMenuFunction(r); return; }
+    closeMenu();
+    addUnsupported(r);
+  }
+
+  function denyMenu(r) {
+    // The handheld ignores a key its menu does not offer.  Saying nothing at
+    // all reads as a broken page, so the menu flashes and the reason is
+    // printed on its own footer line.
+    const pop = el("menuPop");
+    pop.classList.remove("deny");
+    void pop.offsetWidth;              // restart the animation
+    pop.classList.add("deny");
+    const foot = pop.querySelector(".menu-foot");
+    if (foot) {
+      foot.textContent = (r.error && r.error.message) || "Not on this menu.";
+      clearTimeout(menuFootTimer);
+      menuFootTimer = setTimeout(drawMenu, 1400);
+    }
+  }
+
+  function menuBack() {
+    // esc closes the menu outright; the left arrow backs up one level, which
+    // is what each of them does on the handheld.
+    if (!menuState) return false;
+    closeMenu();
+    return true;
+  }
+
+  function menuLevelUp() {
+    if (!menuState) return false;
+    if (menuState.path.length <= 1) { closeMenu(); return true; }
+    const r = askMenu(menuState.app, menuState.path.slice(0, -1));
+    if (r.ok) showMenu(r); else closeMenu();
+    return true;
+  }
+
+  function menuMove(delta) {
+    const res = menuState && menuState.res;
+    if (!res || !res.items || !res.items.length) return;
+    menuSel = (menuSel + delta + res.items.length) % res.items.length;
+    drawMenu();
+  }
+
+  function menuSelect() {
+    const res = menuState && menuState.res;
+    if (!res || !res.items || !res.items.length) return;
+    pickMenuKey(res.items[menuSel].key);
+  }
+
+  function drawMenu() {
+    if (!menuState) return;
+    const res = menuState.res, pop = el("menuPop");
+    const crumb = (res.breadcrumb || []).join(" \u203a ");
+    const items = res.items || [];
+    pop.hidden = false;
+    pop.setAttribute("aria-label", (res.title || "Menu") + " menu");
+    pop.innerHTML =
+      '<div class="menu-head">' + esc(crumb) + "</div>" +
+      '<ul class="menu-list">' + items.map((it, i) =>
+        '<li data-key="' + esc(it.key) + '"' + (i === menuSel ? ' class="on"' : "") +
+        '><span class="mk">' + esc(it.key) + "</span><span>" + esc(it.label) +
+        "</span></li>").join("") + "</ul>" +
+      '<div class="menu-foot">' + esc(res.title || "") +
+      ' \u2014 esc closes, \u25c2 backs up</div>';
+    const on = pop.querySelector("li.on");
+    if (on && on.scrollIntoView) on.scrollIntoView({ block: "nearest" });
+  }
+
   /* ---------- actions bound to the keys that are not characters ---------- */
   const ACTIONS = {
-    enter: () => { const v = cmd.value; cmd.value = ""; run(v); },
-    del: backspace,
-    // Esc clears the entry line and nothing else: on the handheld it backs out
-    // of whatever you are in, and wiping the results would not be that.
-    esc: () => { if (cmd.value) { cmd.value = ""; } cmd.focus(); },
+    enter: () => {
+      if (menuState) { menuSelect(); return; }
+      const v = cmd.value; cmd.value = ""; run(v);
+    },
+    del: () => { if (!menuState) backspace(); },
+    // Esc backs out of whatever you are in.  With a menu open that is the
+    // menu; otherwise it clears the entry line -- wiping the results would
+    // not be "backing out".
+    esc: () => {
+      if (menuBack()) { cmd.focus(); return; }
+      if (cmd.value) { cmd.value = ""; }
+      cmd.focus();
+    },
     tab: () => { const s = el("refSearch"); s.focus(); s.select(); },
     doc: () => addNote(HELP),
-    menu: () => { const s = el("refSearch"); s.value = ""; s.dispatchEvent(new Event("input")); s.focus(); },
-    var: () => insert("stat."),
-    scratch: () => clearScreen("<b>New page.</b> Variables and <code>stat.results</code> are kept.")
+    menu: () => {
+      if (menuState) { closeMenu(); cmd.focus(); return; }
+      openMenu(currentApp, []);
+    },
+    var: () => { if (!menuState) insert("stat."); },
+    scratch: () => {
+      if (menuState) { closeMenu(); return; }
+      clearScreen("<b>New page.</b> Variables and <code>stat.results</code> are kept.");
+    }
   };
 
   function act(name) { const fn = ACTIONS[name]; if (fn) fn(); }
@@ -786,6 +1024,16 @@ footer a{color:var(--ink-soft)}
     const padBtn = ev.target.closest("[data-pad]");
     if (padBtn) {
       const dir = padBtn.dataset.pad;
+      // With a menu open the touchpad walks the menu, which is how the
+      // handheld's menus are actually navigated.
+      if (menuState) {
+        if (dir === "ok") return menuSelect();
+        if (dir === "left") return void menuLevelUp();
+        if (dir === "up") return menuMove(-1);
+        if (dir === "down") return menuMove(1);
+        if (dir === "right") return menuSelect();
+        return;
+      }
       if (dir === "ok") return act("enter");
       if (dir === "left") return moveCaret(-1);
       if (dir === "right") return moveCaret(1);
@@ -808,6 +1056,9 @@ footer a{color:var(--ink-soft)}
     if (action && ACTIONS[action]) return act(action);
     let text = btn.dataset.ins;
     if (text == null) return;
+    // While a menu is open the keypad drives the menu: the digit or letter
+    // picks a line instead of being typed into the entry line.
+    if (menuState) return pressMenuKey(text);
     if (greekNext) {
       // The modifier is spent on the next key whatever that key is, the way
       // the handheld's does -- a latch that survives a digit press is a latch
@@ -818,6 +1069,24 @@ footer a{color:var(--ink-soft)}
       return;
     }
     insert(text);
+  });
+
+  // A key the menu does not offer is ignored, the way the handheld ignores it;
+  // anything that is not a menu key at all does nothing either.
+  function pressMenuKey(text) {
+    if (text.length !== 1) return;
+    const key = text.toUpperCase();
+    if (MENU_KEYS.includes(key)) { pickMenuKey(key); return; }
+    denyMenu({ error: { message: key + " is not a menu key." } });
+  }
+
+  // The menu can be clicked too -- a keypad is not the only pointer in reach.
+  el("menuPop").addEventListener("click", (ev) => {
+    const line = ev.target.closest("li[data-key]");
+    if (!line || !menuState) return;
+    menuSel = (menuState.res.items || []).findIndex((it) => it.key === line.dataset.key);
+    if (menuSel < 0) menuSel = 0;
+    pickMenuKey(line.dataset.key);
   });
 
   // ctrl latches for exactly one character, like the handheld's modifier.
@@ -861,6 +1130,22 @@ footer a{color:var(--ink-soft)}
   });
 
   cmd.addEventListener("keydown", (ev) => {
+    if (menuState) {
+      // The menu takes the keyboard: the same letters that are menu keys on
+      // the keypad are menu keys here.
+      if (ev.key === "Escape") { ev.preventDefault(); act("esc"); return; }
+      if (ev.key === "ArrowUp") { ev.preventDefault(); menuMove(-1); return; }
+      if (ev.key === "ArrowDown") { ev.preventDefault(); menuMove(1); return; }
+      if (ev.key === "ArrowLeft") { ev.preventDefault(); menuLevelUp(); return; }
+      if (ev.key === "ArrowRight" || ev.key === "Enter") {
+        ev.preventDefault(); menuSelect(); return;
+      }
+      if (ev.key.length === 1 && !ev.metaKey && !ev.ctrlKey && !ev.altKey) {
+        ev.preventDefault();
+        pressMenuKey(ev.key);
+      }
+      return;
+    }
     if (ev.key === "ArrowUp" && history.length) {
       ev.preventDefault();
       hIndex = Math.max(0, hIndex - 1); cmd.value = history[hIndex] || "";
@@ -880,10 +1165,42 @@ footer a{color:var(--ink-soft)}
 
   el("resetBtn").addEventListener("click", () => {
     if (window.LA.ready) window.LA.dispatch({ op: "reset" });
+    closeMenu();
     variables.clear(); syncVariables();
     history = []; hIndex = 0;
     clearScreen("<b>Reset.</b> Variables, history and <code>stat.results</code> are cleared.");
     cmd.focus();
+  });
+
+  /* ---------- which page you are on ----------
+     The menu key opens the menu of the application on the page, and the two
+     applications that hold statistics number it differently.  Rather than
+     guess which habit the visitor has, both pages are offered. */
+  function setApp(key) {
+    currentApp = key;
+    closeMenu();
+    const hint = el("pageHint");
+    if (hint) {
+      const found = appsInfo.find((a) => a.key === key);
+      hint.textContent = found && found.statisticsKey
+        ? "menu " + found.statisticsKey + " 1 1 \u2192 One-Variable Statistics"
+        : "";
+    }
+    buildAppButtons();
+  }
+
+  function buildAppButtons() {
+    const host = el("appButtons");
+    if (!host) return;
+    host.innerHTML = appsInfo.map((a) =>
+      '<button class="chip-btn page-btn" type="button" data-app="' + esc(a.key) + '"' +
+      (a.key === currentApp ? ' aria-pressed="true"' : ' aria-pressed="false"') + ">" +
+      esc(a.label) + "</button>").join("");
+  }
+
+  el("appButtons").addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-app]");
+    if (b) setApp(b.dataset.app);
   });
 
   function syncVariables() {
@@ -951,9 +1268,12 @@ footer a{color:var(--ink-soft)}
   /* ---------- boot ---------- */
   el("repoLink").href = REPO;
   buildPad();
+  setApp("listssheet");
   syncVariables();
   clearScreen(
     "<b>Ready.</b> Type on the keypad, or use your own keyboard.<br>" +
+    "Press <code>menu</code>, then <code>4 1 1</code>: the menu is the page's<br>" +
+    "own, and this page is a Lists&nbsp;&amp;&nbsp;Spreadsheet page.<br>" +
     "A list is <code>{1,2,3}</code>; an argument you skip stays empty:<br>" +
     "<code>tInterval v,sx,n,,0.95</code>.<br>" +
     "The <code>doc</code> key shows the syntax card."
@@ -966,6 +1286,9 @@ footer a{color:var(--ink-soft)}
     renderRef(fns);
     el("refCount").textContent = fns.length + " names";
     window.__laCatalog = fns;
+    appsInfo = cat.apps || [];
+    statResultsName = cat.statResults || statResultsName;
+    setApp(currentApp);
   });
 })();
 </script>
