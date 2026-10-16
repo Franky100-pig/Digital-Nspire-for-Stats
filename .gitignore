@@ -11,6 +11,12 @@ dist/
 .eggs/
 wheels/
 
+# Web build inputs and output.  web/runtime/ is 14 MB of downloaded Pyodide,
+# fetched by web/fetch_runtime.py; web/dist/ is what that is built into.  Both
+# are reproducible from the source tree, so neither belongs in history.
+web/runtime/
+web/dist/
+
 # Test and tooling caches
 .pytest_cache/
 .benchmarks/

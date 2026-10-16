@@ -10,18 +10,35 @@
  * The whole Python package is pure standard library, so nothing has to be
  * installed at runtime -- no micropip, no sympy.  Boot is one wasm download.
  *
- * Three CDNs are tried in order.  fastly.jsdelivr.net is first because it is the
- * one that consistently answers from mainland China.
+ *
+ * WHERE THE RUNTIME COMES FROM
+ * ----------------------------
+ * "./runtime/" first, and that is not a preference -- it is the fix for a real
+ * failure.  The first version of this page fetched the interpreter from a
+ * public CDN, which is fine from a fast connection and useless from a throttled
+ * one: mainland China resets or stalls those endpoints, so the page drew its
+ * entire interface and then sat on "Loading the Python runtime" forever, with
+ * nothing wrong on our own server.  Shipping the runtime as part of the site
+ * means one origin, one connection, and no third party that can be blocked
+ * independently of the page itself.
+ *
+ * The CDN list is kept as a fallback for one case only: someone who clones the
+ * repository and serves web/ without running fetch_runtime.py.  If ./runtime/
+ * answers, no third party is ever contacted.
  */
-window.LA = { ready: false, error: null, dispatch: null, cdn: null, loadMs: null };
+window.LA = { ready: false, error: null, dispatch: null, origin: null, loadMs: null };
 
 (function () {
   const PYODIDE_VERSION = "v0.26.2";
-  const CDNS = [
-    "https://fastly.jsdelivr.net/pyodide/",
-    "https://cdn.jsdelivr.net/pyodide/",
-    "https://unpkg.com/pyodide@",
-  ].map(function (base) { return base + PYODIDE_VERSION + "/full/"; });
+
+  //: Where the interpreter is looked for, in order.  entries are
+  //: [indexURL, label]; the label is what the status line calls it.
+  const SOURCES = [
+    ["./runtime/", "this site"],
+    ["https://fastly.jsdelivr.net/pyodide/" + PYODIDE_VERSION + "/full/", "fastly.jsdelivr.net"],
+    ["https://cdn.jsdelivr.net/pyodide/" + PYODIDE_VERSION + "/full/", "cdn.jsdelivr.net"],
+    ["https://unpkg.com/pyodide@" + PYODIDE_VERSION + "/", "unpkg.com"],
+  ];
 
   const statusEl = function () { return document.getElementById("engineStatus"); };
   const note = function (text) { const el = statusEl(); if (el) el.textContent = text; };
@@ -40,26 +57,32 @@ window.LA = { ready: false, error: null, dispatch: null, cdn: null, loadMs: null
 
   async function loadRuntime() {
     const failures = [];
-    const t0 = Date.now();
+    const started = Date.now();
     const tick = setInterval(function () {
-      const s = Math.round((Date.now() - t0) / 1000);
-      note("Downloading the Python runtime (~11 MB) \u2014 " + s +
-           "s so far. First visit only; your browser caches it.");
+      const s = Math.round((Date.now() - started) / 1000);
+      note("Loading Python \u2014 " + s + "s. One download; the browser keeps it.");
     }, 1000);
     try {
-      for (let i = 0; i < CDNS.length; i++) {
-        const indexURL = CDNS[i];
+      for (let i = 0; i < SOURCES.length; i++) {
+        const indexURL = SOURCES[i][0];
+        const label = SOURCES[i][1];
         try {
-          note("Loading Python runtime from " + new URL(indexURL).host + " \u2026");
+          note(label === "this site"
+            ? "Loading the Python runtime from this site \u2026"
+            : "Loading Python from " + label + " \u2026");
           await injectScript(indexURL + "pyodide.js");
+          // A static host that does not have runtime/ answers with an HTML 404
+          // page, and a <script> tag pointed at HTML still fires onload.  So the
+          // real test is whether the loader appeared, not whether the tag loaded.
           if (typeof window.loadPyodide !== "function") {
             throw new Error("pyodide.js did not define loadPyodide");
           }
           const pyodide = await window.loadPyodide({ indexURL: indexURL });
-          window.LA.cdn = new URL(indexURL).host;
+          window.LA.origin = label;
           return pyodide;
         } catch (err) {
-          failures.push(new URL(indexURL).host + ": " + err.message);
+          failures.push(label + ": " + err.message);
+          delete window.loadPyodide;
         }
       }
       throw new Error(failures.join(" | "));
@@ -108,15 +131,13 @@ window.LA = { ready: false, error: null, dispatch: null, cdn: null, loadMs: null
       window.LA.ready = true;
       window.LA.loadMs = Date.now() - started;
       noteHTML(
-        "Engine ready \u00b7 " + count + " Python files \u00b7 " +
-        "Pyodide " + PYODIDE_VERSION + " via " + window.LA.cdn +
-        " \u00b7 " + (window.LA.loadMs / 1000).toFixed(1) + "s"
+        "Ready \u00b7 " + count + " Python files \u00b7 Pyodide " + PYODIDE_VERSION +
+        " from " + window.LA.origin + " \u00b7 " + (window.LA.loadMs / 1000).toFixed(1) + "s"
       );
       document.body.classList.add("engine-ready");
     } catch (err) {
       window.LA.error = String(err && err.message ? err.message : err);
-      noteHTML("Engine failed to load \u2014 check your connection, then reload. (" +
-               window.LA.error + ")");
+      noteHTML("Engine failed to load \u2014 reload the page. (" + window.LA.error + ")");
       document.body.classList.add("engine-failed");
     }
   }

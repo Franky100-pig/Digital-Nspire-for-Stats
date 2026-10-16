@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
-"""Bundle the statistics package and the web page into one static folder.
+"""Bundle the statistics package, the interpreter and the page into one folder.
 
 The page runs the *real* ``tinspire_stats`` package -- the same modules the test
 suite covers -- inside Pyodide, so this script does nothing clever: it turns the
-Python sources into a JavaScript object, drops the bridge and the HTML next to
-it, and writes the result to ``web/dist/``.
+Python sources into a JavaScript object, copies the interpreter that
+``fetch_runtime.py`` downloaded, drops the bridge and the HTML next to it, and
+writes the result to ``web/dist/``.
 
+    python web/fetch_runtime.py                 # once: download the interpreter
     python web/build_preview.py                 # build into web/dist
     python web/build_preview.py --serve         # build, then serve on :8000
     python web/build_preview.py --serve 8123    # ...on another port
 
-``web/dist/index.html`` is a normal static page: any web server, a GitHub Pages
-branch, or a plain ``python -m http.server`` will do.  It must be served over
-HTTP rather than opened as a file, because the browser fetches the Python
-runtime from a CDN.
+``web/dist/`` is a normal static folder: any web server, a GitHub Pages branch,
+or a plain ``python -m http.server`` will do.  It must be served over HTTP and
+not opened as a file, because the browser has to fetch the interpreter from
+``runtime/`` and ``file://`` blocks that.  Everything the page needs is inside
+the folder -- there is no CDN in the load path.
 """
 
 from __future__ import annotations
@@ -31,6 +34,7 @@ HERE = Path(__file__).resolve().parent          # .../web
 ROOT = HERE.parent                              # project root
 PACKAGE = ROOT / "tinspire_stats"
 DEFAULT_OUT = HERE / "dist"
+RUNTIME_DIR = HERE / "runtime"
 
 #: Files the page needs.  Nothing else from the repository is shipped -- no
 #: tests, no tools, no scipy.
@@ -81,7 +85,36 @@ def build(out_dir: Path) -> int:
     print(f"  la-bridge.js      {(HERE / 'la-bridge.js').stat().st_size:>9,} bytes")
     print(f"  core_bundle.js    {bundle.stat().st_size:>9,} bytes  "
           f"({len(files)} Python modules, {total:,} bytes of source)")
+
+    runtime_bytes = copy_runtime(out_dir)
+    grand = sum(p.stat().st_size for p in out_dir.rglob("*") if p.is_file())
+    print(f"  {'runtime/':<18}{runtime_bytes:>9,} bytes  (Pyodide, so the page needs no CDN)")
+    print(f"  {'':<18}{grand:>9,} bytes  total")
     return 0
+
+
+def copy_runtime(out_dir: Path) -> int:
+    """Put the interpreter next to the page, so nothing is fetched from a CDN.
+
+    A missing ``web/runtime/`` is a hard error rather than a warning: the build
+    would still succeed and would still work on a fast connection, which is
+    exactly the bug that took a deployment to notice.  Fail loudly instead.
+    """
+    if not RUNTIME_DIR.is_dir():
+        raise SystemExit(
+            f"no interpreter at {RUNTIME_DIR}\n"
+            f"run:  python {HERE.name}/fetch_runtime.py"
+        )
+    dest = out_dir / "runtime"
+    dest.mkdir(parents=True, exist_ok=True)
+    total = 0
+    for src in sorted(RUNTIME_DIR.iterdir()):
+        if src.is_file():
+            shutil.copy(src, dest / src.name)
+            total += src.stat().st_size
+    if total == 0:
+        raise SystemExit(f"{RUNTIME_DIR} is empty -- run fetch_runtime.py again")
+    return total
 
 
 def serve(directory: Path, port: int) -> None:
