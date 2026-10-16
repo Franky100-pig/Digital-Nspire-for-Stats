@@ -4,14 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="la-entry-module" content="{{ENTRY_MODULE}}">
-<title>TI-Nspire Statistics &mdash; in the browser</title>
-<meta name="description" content="Type TI-Nspire statistics commands and get the calculator's own results, computed in your browser by Python (WebAssembly). 84 catalog names, identical spelling.">
-<link rel="preconnect" href="https://fastly.jsdelivr.net" crossorigin>
-<link rel="dns-prefetch" href="https://fastly.jsdelivr.net">
-<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<link rel="dns-prefetch" href="https://unpkg.com">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6fed'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='19' fill='white' text-anchor='middle'%3En%3C/text%3E%3C/svg%3E">
+<title>TI-Nspire CX II Statistics &mdash; in the browser</title>
+<meta name="description" content="A TI-Nspire CX II front panel for the statistics functions, running the real Python package in your browser. 84 catalog names, spelled as the guide spells them.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23353b44'/%3E%3Crect x='5' y='6' width='22' height='13' rx='2' fill='%23eef2f5'/%3E%3Crect x='5' y='23' width='22' height='4' rx='2' fill='%23e8912f'/%3E%3C/svg%3E">
 <style>
+/* ==========================================================================
+   Two palettes at once, on purpose.
+
+   The page follows the system theme.  The calculator does not: it is a
+   photograph of an object, and an object does not change colour when you
+   turn the lights off.  So the chassis tones are fixed while everything
+   around them -- including the lit screen, which really would be dimmer at
+   night -- follows prefers-color-scheme.
+   ========================================================================== */
 :root{
   --bg:#ffffff;
   --surface:#f7f9fc;
@@ -32,6 +37,34 @@
   --radius:12px;
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif;
+
+  /* the lit screen */
+  --lcd:#f6f8f9;
+  --lcd-ink:#101519;
+  --lcd-dim:#5d6b76;
+  --lcd-rule:#cfd8de;
+  --lcd-sel:#e4eaef;
+
+  /* the handheld.  fixed, both themes. */
+  --case-hi:#4a515b;
+  --case:#333941;
+  --case-lo:#1f242a;
+  --plate:#3d434c;
+  --plate-lo:#2b3037;
+  --key-face:linear-gradient(180deg,#4e555f,#3c424b);
+  --key-face-2:linear-gradient(180deg,#5b626c,#464d56);
+  --key-edge:#20252b;
+  --key-ink:#f0f3f6;
+  --key-shadow:rgba(0,0,0,.45);
+  --acc:#ec9a3c;
+  --enter-key:linear-gradient(180deg,#3f82f5,#2a61c9);
+  --bezel:#14181c;
+
+  /* the device geometry.  everything scales off --dw so the keypad keeps the
+     handheld's proportions instead of collapsing on a narrow window. */
+  --dw:clamp(320px,94vw,472px);
+  --sw:calc(var(--dw) * .876);
+  --du:calc(var(--dw) / 100);       /* one percent of the device width */
 }
 @media (prefers-color-scheme:dark){
   :root{
@@ -39,6 +72,11 @@
     --line-strong:#33445e; --ink:#e8eef7; --ink-soft:#a9b8cc; --ink-faint:#7b8ba1;
     --accent:#6d9bff; --accent-soft:#1a2740; --good:#4fd1a0; --good-soft:#122e26;
     --warn:#e0b355; --warn-soft:#2c2415; --bad:#f08a80; --bad-soft:#2e1a19;
+    --lcd:#0f151b;
+    --lcd-ink:#dbe6ef;
+    --lcd-dim:#8fa1b0;
+    --lcd-rule:#26313b;
+    --lcd-sel:#1c242d;
   }
 }
 *{box-sizing:border-box}
@@ -51,214 +89,303 @@ body{
 
 /* ---------- top bar ---------- */
 .topbar{
-  display:flex; align-items:center; gap:18px; flex-wrap:wrap;
-  padding:14px clamp(14px,3vw,32px); border-bottom:1px solid var(--line);
-  position:sticky; top:0; z-index:20; background:var(--bg);
+  display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  padding:12px clamp(14px,3vw,30px); border-bottom:1px solid var(--line);
+  position:sticky; top:0; z-index:30; background:var(--bg);
 }
 .brand{display:flex; align-items:center; gap:11px; min-width:0}
-.logo{
-  width:34px;height:34px;border-radius:9px;background:var(--accent);color:#fff;
-  display:grid;place-items:center;font-family:Georgia,serif;font-size:20px;
-  font-weight:600;flex:0 0 auto;
-}
-.brand h1{margin:0;font-size:16px;font-weight:650;letter-spacing:-.01em;white-space:nowrap}
-.brand p{margin:1px 0 0;font-size:12.5px;color:var(--ink-soft)}
+.brand h1{margin:0; font-size:15.5px; font-weight:650; letter-spacing:-.01em; white-space:nowrap}
+.brand p{margin:1px 0 0; font-size:12.5px; color:var(--ink-soft)}
 .spacer{flex:1 1 auto}
 .status{
-  font-size:12px;color:var(--ink-soft);background:var(--surface);
-  border:1px solid var(--line);border-radius:999px;padding:4px 12px;
-  max-width:min(52ch,60vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:12px; color:var(--ink-soft); background:var(--surface);
+  border:1px solid var(--line); border-radius:999px; padding:4px 12px;
+  max-width:min(54ch,58vw); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
-body.engine-ready .status{color:var(--good);background:var(--good-soft);border-color:transparent}
-body.engine-failed .status{color:var(--bad);background:var(--bad-soft);border-color:transparent}
-.ghost{
-  font-size:12.5px;color:var(--ink-soft);text-decoration:none;border:1px solid var(--line);
-  border-radius:999px;padding:5px 13px;white-space:nowrap;
+body.engine-ready .status{color:var(--good); background:var(--good-soft); border-color:transparent}
+body.engine-failed .status{color:var(--bad); background:var(--bad-soft); border-color:transparent}
+.btn{
+  border:1px solid var(--line-strong); background:var(--bg); color:var(--ink-soft);
+  border-radius:9px; padding:5px 13px; font-size:12.5px; font-family:var(--sans); cursor:pointer;
+  white-space:nowrap; text-decoration:none;
 }
-.ghost:hover{color:var(--accent);border-color:var(--accent)}
+.btn:hover{color:var(--accent); border-color:var(--accent)}
+.btn:disabled{opacity:.45; cursor:not-allowed}
 
 /* ---------- layout ---------- */
 .layout{
-  flex:1 1 auto; display:grid; gap:clamp(14px,2vw,22px);
-  grid-template-columns:minmax(0,1.6fr) minmax(300px,.95fr);
-  padding:clamp(14px,3vw,28px) clamp(14px,3vw,32px) 28px;
-  align-items:start; max-width:1400px; width:100%; margin:0 auto;
+  flex:1 1 auto; display:grid; gap:clamp(16px,2.4vw,30px);
+  grid-template-columns:auto minmax(300px,1fr);
+  padding:clamp(16px,3vw,30px) clamp(14px,3vw,30px) 24px;
+  align-items:start; max-width:1240px; width:100%; margin:0 auto;
+  justify-content:center;
 }
-@media (max-width:960px){ .layout{grid-template-columns:1fr} }
+@media (max-width:1000px){ .layout{grid-template-columns:1fr} }
+.stage{display:flex; flex-direction:column; align-items:center; gap:14px; min-width:0}
+@media (max-width:1000px){ .stage{width:100%} }
 
-/* ---------- calculator ---------- */
-.calc{display:flex;flex-direction:column;gap:12px;min-width:0}
-.screen{
-  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
-  padding:14px 16px; min-height:340px; max-height:min(64vh,700px); overflow-y:auto;
-  scroll-behavior:smooth;
+/* ==========================================================================
+   The handheld
+   ========================================================================== */
+.device{
+  width:var(--dw);
+  padding:calc(var(--du)*3.2) calc(var(--du)*3.4) calc(var(--du)*4.2);
+  border-radius:calc(var(--du)*4.6);
+  background:
+    linear-gradient(180deg,var(--case-hi) 0%,var(--case) 22%,var(--case-lo) 100%);
+  box-shadow:
+    0 calc(var(--du)*1.4) calc(var(--du)*4) rgba(20,25,32,.45),
+    0 1px 0 rgba(255,255,255,.10) inset,
+    0 -2px 0 rgba(0,0,0,.30) inset;
+  border:1px solid rgba(0,0,0,.45);
+  position:relative;
+  user-select:none;
 }
-.screen::-webkit-scrollbar{width:10px}
-.screen::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:99px;border:3px solid var(--surface)}
+/* the moulded seam that runs around a real Nspire */
+.device::after{
+  content:""; position:absolute; inset:calc(var(--du)*1.1);
+  border-radius:calc(var(--du)*3.9);
+  border:1px solid rgba(255,255,255,.055);
+  pointer-events:none;
+}
+.brandbar{
+  display:flex; align-items:baseline; justify-content:space-between; gap:8px;
+  padding:0 calc(var(--du)*1.6) calc(var(--du)*2.2);
+}
+.brandbar .ti{
+  font-size:calc(var(--du)*2.5); letter-spacing:.16em; font-weight:700;
+  color:#c9d1da; text-transform:uppercase;
+}
+.brandbar .model{
+  font-size:calc(var(--du)*2.6); font-weight:600; color:#e8edf2; letter-spacing:.01em;
+}
+.brandbar .model em{font-style:normal; color:var(--acc)}
 
-.empty h2{margin:4px 0 8px;font-size:15px;font-weight:650}
-.empty p{margin:0 0 8px;color:var(--ink-soft);font-size:13.5px}
-.empty ul{margin:0 0 12px;padding-left:20px;color:var(--ink-soft);font-size:13.5px}
-.empty li{margin:3px 0}
-.empty code{font-family:var(--mono);font-size:12.5px;background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
-.factrow{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
-.fact{font-size:11.5px;color:var(--ink-soft);background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:3px 10px}
-.fact b{color:var(--ink);font-weight:600}
-
-.entry{border-top:1px solid var(--line);padding:11px 0 13px}
-.entry:first-child{border-top:0;padding-top:2px}
-.cmdline{display:flex;gap:9px;align-items:baseline}
-.caret{color:var(--accent);font-weight:700;flex:0 0 auto}
-.cmdline code{font-family:var(--mono);font-size:13.5px;color:var(--ink);word-break:break-word;flex:1 1 auto}
-.entry.is-error .cmdline code{color:var(--bad)}
-pre.note{
-  margin:0;font-family:var(--mono);font-size:12px;line-height:1.6;color:var(--ink-soft);
-  background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 13px;
-  white-space:pre-wrap;overflow:auto;
+/* --- the screen --- */
+.lcd-wrap{
+  padding:calc(var(--du)*2.4) calc(var(--du)*2.4) calc(var(--du)*3);
+  border-radius:calc(var(--du)*2.4);
+  background:linear-gradient(180deg,#0c0f13,#191e24);
+  box-shadow:0 calc(var(--du)*.8) calc(var(--du)*2) rgba(0,0,0,.55) inset,
+             0 0 0 1px rgba(255,255,255,.05);
 }
-.answer{
-  font-family:var(--mono);font-size:14px;color:var(--accent);margin:6px 0 0 22px;
-  word-break:break-word;white-space:pre-wrap;
+.lcd{
+  width:var(--sw); height:calc(var(--sw) * .75);
+  overflow:hidden; border-radius:calc(var(--du)*.9);
+  background:var(--lcd);
+  box-shadow:0 0 0 1px rgba(0,0,0,.6), 0 0 calc(var(--du)*1.2) rgba(90,150,220,.10);
 }
-.answer.is-eq{color:var(--ink)}
-.docs{margin:6px 0 0 22px}
-.docs summary{font-size:11.5px;color:var(--ink-faint);cursor:pointer;list-style:none;display:inline-block}
-.docs summary::-webkit-details-marker{display:none}
-.docs summary:hover{color:var(--accent)}
-.docs pre{
-  margin:6px 0 0;font-family:var(--mono);font-size:12px;line-height:1.5;color:var(--ink-soft);
-  background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:10px 12px;
-  white-space:pre-wrap;max-height:230px;overflow:auto;
+/* A real 320x240 panel, drawn at its own scale and then scaled up.  Doing it
+   this way keeps the status bar, the entry line and the font proportions in
+   the calculator's own coordinates instead of approximating them. */
+.lcd-in{
+  width:320px; height:240px; transform:scale(calc(var(--sw) / 320));
+  transform-origin:top left;
+  display:flex; flex-direction:column;
+  font-family:var(--mono); font-size:11px; line-height:1.32; color:var(--lcd-ink);
+  background:var(--lcd);
 }
-
-/* stat.results table */
-.vars{margin:9px 0 0 22px;background:var(--bg);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.vars-head{
-  display:flex;align-items:center;gap:8px;padding:7px 11px;border-bottom:1px solid var(--line);
-  background:var(--surface-2);
+.statusbar{
+  flex:0 0 auto; height:15px; display:flex; align-items:center; gap:7px;
+  padding:0 5px; font-size:8.5px; color:var(--lcd-dim);
+  border-bottom:1px solid var(--lcd-rule);
 }
-.vars-head .title{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);letter-spacing:.02em}
-.badge{font-size:10.5px;border-radius:999px;padding:2px 8px;font-weight:500}
-.badge.carry{background:var(--warn-soft);color:var(--warn)}
-.copy{margin-left:auto;background:none;border:0;color:var(--ink-faint);font-size:11px;cursor:pointer;padding:2px 4px}
-.copy:hover{color:var(--accent)}
-table.vars-t{width:100%;border-collapse:collapse;font-size:12.5px}
-table.vars-t td{padding:4px 11px;border-top:1px solid var(--line);vertical-align:top}
-table.vars-t tr:first-child td{border-top:0}
-.vname{color:var(--ink-soft);white-space:nowrap;width:1%;padding-right:16px}
-.vval{font-family:var(--mono);color:var(--ink);word-break:break-word;text-align:right}
-.vval.is-list{color:var(--ink)}
-.vval.is-eq{color:var(--accent)}
-
-/* error card */
-.err{
-  margin:8px 0 0 22px;background:var(--bad-soft);border:1px solid transparent;
-  border-radius:10px;padding:10px 12px;
+.statusbar .pg{font-weight:700; color:var(--lcd-ink)}
+.statusbar .docname{flex:1 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.statusbar .smode{letter-spacing:.05em}
+.statusbar svg{display:block}
+.viewport{
+  flex:1 1 auto; overflow-y:auto; overflow-x:hidden;
+  padding:3px 5px 5px; scrollbar-gutter:stable;
 }
-.err-head{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
-.chip{font-family:var(--mono);font-size:10.5px;background:var(--bg);color:var(--bad);border-radius:6px;padding:2px 7px}
-.chip.ti{color:var(--accent)}
-.err p{margin:0;font-size:13px;color:var(--ink);white-space:pre-wrap}
-.err .sig{margin-top:6px;font-size:12px;color:var(--ink-soft)}
-.err .sig code{font-family:var(--mono);font-size:12px;background:var(--bg);border-radius:5px;padding:1px 6px}
-.suggest{
-  margin-top:9px;background:var(--bg);border:1px solid var(--line-strong);color:var(--accent);
-  border-radius:8px;padding:5px 11px;font-size:12.5px;cursor:pointer;font-family:var(--sans);
+.viewport::-webkit-scrollbar{width:5px}
+.viewport::-webkit-scrollbar-track{background:transparent}
+.viewport::-webkit-scrollbar-thumb{background:var(--lcd-rule); border-radius:99px}
+.entryline{
+  flex:0 0 auto; display:flex; align-items:center; gap:3px; padding:2px 5px 3px;
+  border-top:1px solid var(--lcd-rule); background:var(--lcd);
 }
-.suggest:hover{border-color:var(--accent)}
-.suggest code{font-family:var(--mono);font-size:12px}
-
-/* prompt */
-.prompt{
-  display:flex;align-items:center;gap:10px;background:var(--surface);
-  border:1px solid var(--line-strong);border-radius:var(--radius);padding:9px 11px;
-  transition:border-color .15s,box-shadow .15s;
-}
-.prompt:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-.prompt .caret{font-size:15px}
+.entryline .arrow{color:var(--lcd-dim); font-size:11px}
 #cmd{
-  flex:1 1 auto;border:0;background:none;outline:0;color:var(--ink);
-  font-family:var(--mono);font-size:14.5px;min-width:0;padding:3px 0;
+  flex:1 1 auto; min-width:0; border:0; outline:0; background:transparent;
+  font-family:var(--mono); font-size:11px; color:var(--lcd-ink); padding:1px 0;
 }
-#cmd::placeholder{color:var(--ink-faint)}
-.btn{
-  border:1px solid var(--line-strong);background:var(--bg);color:var(--ink-soft);
-  border-radius:9px;padding:6px 13px;font-size:13px;font-family:var(--sans);cursor:pointer;
-  white-space:nowrap;
-}
-.btn:hover{color:var(--accent);border-color:var(--accent)}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-.btn.primary:hover{filter:brightness(1.07);color:#fff}
-.btn:disabled{opacity:.45;cursor:not-allowed}
-.hint{font-size:11.5px;color:var(--ink-faint);margin-left:2px}
-.hint kbd{
-  font-family:var(--mono);font-size:10.5px;background:var(--surface-2);border-radius:4px;
-  padding:1px 5px;color:var(--ink-soft);
-}
+#cmd::placeholder{color:var(--lcd-dim); opacity:.7}
+.hidden-submit{position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; border:0; padding:0}
 
-/* chips */
-.chips{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
-.chips .lead{font-size:11.5px;color:var(--ink-faint);margin-right:1px}
-.chip-btn{
-  font-family:var(--mono);font-size:12px;background:var(--surface);border:1px solid var(--line);
-  border-radius:999px;padding:4px 11px;cursor:pointer;color:var(--ink-soft);
+/* --- things drawn on the screen --- */
+.ent{padding:3px 0 5px}
+.ent + .ent{border-top:1px solid var(--lcd-rule)}
+.in{display:flex; gap:3px; color:var(--lcd-ink); word-break:break-word}
+.in .arrow{color:var(--lcd-dim); flex:0 0 auto}
+.in.is-bad{color:#d2453a}
+.out{text-align:right; color:var(--lcd-ink); word-break:break-word; padding-top:1px}
+.out.is-eq{text-align:left}
+.note{
+  margin:3px 0 0; font-family:var(--mono); font-size:10px; line-height:1.4;
+  color:var(--lcd-dim); white-space:pre-wrap; word-break:break-word;
+  background:var(--lcd-sel); border-radius:2px; padding:4px 5px;
 }
-.chip-btn:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
-.chip-btn.var{color:var(--good);border-color:transparent;background:var(--good-soft)}
+.tbl{margin-top:3px; border:1px solid var(--lcd-rule); border-radius:2px; overflow:hidden}
+.tbl-h{
+  display:flex; align-items:center; gap:5px; padding:2px 5px;
+  background:var(--lcd-sel); border-bottom:1px solid var(--lcd-rule);
+  font-size:9px; color:var(--lcd-dim);
+}
+.tbl-h .carry{color:#b8792a}
+.tbl-h .cp{margin-left:auto; background:none; border:0; padding:0 1px; font:inherit; font-size:9px;
+  color:var(--lcd-dim); cursor:pointer}
+.tbl-h .cp:hover{color:var(--lcd-ink)}
+.tbl table{width:100%; border-collapse:collapse; font-size:10px}
+.tbl td{padding:1px 5px; vertical-align:top}
+.tbl tr + tr td{border-top:1px solid var(--lcd-rule)}
+.tbl .nm{color:var(--lcd-dim); white-space:nowrap; width:1%}
+.tbl .vl{text-align:right; word-break:break-word}
+.tbl .vl.eq{color:#2f6fed}
+.tbl .len{color:var(--lcd-dim); font-size:9px}
+/* a TI error dialog, not a web error card */
+.dlg{margin:4px 0 2px; border:1px solid var(--lcd-ink); border-radius:2px; background:var(--lcd)}
+.dlg-t{padding:2px 5px; background:var(--lcd-ink); color:var(--lcd); font-size:10px}
+.dlg-b{padding:4px 5px; font-size:10px; white-space:pre-wrap; word-break:break-word}
+.dlg-b .k{color:var(--lcd-dim)}
+.dlg-f{display:flex; justify-content:flex-end; gap:4px; padding:0 5px 4px}
+.dlg-f button{
+  font:inherit; font-size:10px; padding:1px 10px; cursor:pointer;
+  border:1px solid var(--lcd-ink); border-radius:2px; background:var(--lcd); color:var(--lcd-ink);
+}
+.dlg-f button:hover{background:var(--lcd-sel)}
+.empty{padding:6px 3px; color:var(--lcd-dim); font-size:10px}
+.empty b{color:var(--lcd-ink); font-weight:700}
+.empty code{font-family:var(--mono); color:var(--lcd-ink)}
+.empty ul{margin:3px 0 0; padding-left:13px}
+.empty li{margin:1px 0}
 
-/* ---------- reference rail ---------- */
+/* --- keypad --- */
+.pad{
+  margin-top:calc(var(--du)*3.2);
+  padding:calc(var(--du)*2.4) calc(var(--du)*1.8) calc(var(--du)*2.6);
+  border-radius:calc(var(--du)*2.2);
+  background:linear-gradient(180deg,var(--plate),var(--plate-lo));
+  box-shadow:0 1px 0 rgba(255,255,255,.07) inset, 0 -1px 0 rgba(0,0,0,.35) inset;
+  display:flex; flex-direction:column; gap:calc(var(--du)*1.5);
+}
+.grid{display:grid; gap:calc(var(--du)*1.15)}
+.g7{grid-template-columns:repeat(7,1fr)}
+.g6{grid-template-columns:repeat(6,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.g10{grid-template-columns:repeat(10,1fr)}
+
+.key{
+  position:relative; cursor:pointer; border:0;
+  border-radius:calc(var(--du)*1.05);
+  background:var(--key-face);
+  color:var(--key-ink);
+  font-family:var(--sans); font-weight:600;
+  font-size:calc(var(--du)*2.75); line-height:1;
+  height:calc(var(--du)*5.6);
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 1px 0 rgba(255,255,255,.14) inset,
+             0 -1.5px 0 var(--key-edge) inset,
+             0 1.5px 1.5px var(--key-shadow);
+  transition:transform .05s, filter .1s;
+  padding:0 1px;
+}
+.key:active,.key.down{transform:translateY(1px); filter:brightness(1.22)}
+.key:focus-visible{outline:2px solid var(--acc); outline-offset:1px}
+.key .sub{
+  position:absolute; top:calc(var(--du)*.5); left:calc(var(--du)*1);
+  font-size:calc(var(--du)*1.6); font-weight:600; color:var(--acc);
+  line-height:1; letter-spacing:0;
+}
+.key.k-fn{background:var(--key-face-2); font-size:calc(var(--du)*2.35)}
+.key.k-sm{font-size:calc(var(--du)*2.3); height:calc(var(--du)*5)}
+.key.k-util{background:var(--key-face-2)}
+.key.k-enter{background:var(--enter-key); font-size:calc(var(--du)*2.4)}
+.key.k-alpha{font-size:calc(var(--du)*2.8)}
+.key.k-sym{font-size:calc(var(--du)*2.5); height:calc(var(--du)*4.4)}
+.key.k-op{font-size:calc(var(--du)*3.2)}
+.key.wide{font-size:calc(var(--du)*2.3)}
+
+/* control cluster: [esc]  ( touchpad )  [ctrl]  /  [tab]  .  [del] */
+.nav{display:grid; grid-template-columns:auto 1fr auto; gap:calc(var(--du)*1.4); align-items:center}
+.nav-col{display:flex; flex-direction:column; gap:calc(var(--du)*1.15); width:calc(var(--du)*14)}
+.touchpad{
+  cursor:pointer; justify-self:center;
+  width:calc(var(--du)*21); height:calc(var(--du)*13);
+  border-radius:999px; border:0; padding:0; position:relative;
+  background:
+    radial-gradient(120% 150% at 50% -18%, rgba(255,255,255,.16), transparent 58%),
+    linear-gradient(180deg,#2a2f36,#1a1e23);
+  box-shadow:0 0 0 1px rgba(0,0,0,.6), 0 2px calc(var(--du)*1.4) rgba(0,0,0,.5) inset;
+  display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr);
+}
+.touchpad span{display:block}
+.touchpad .hz{color:#8e9aa6; display:grid; place-items:center; font-size:calc(var(--du)*2.1); line-height:1}
+.touchpad .ce{
+  border-radius:999px; background:linear-gradient(180deg,#454c56,#333941);
+  box-shadow:0 1px 0 rgba(255,255,255,.14) inset; margin:14%;
+}
+.touchpad .ce:active{filter:brightness(1.3)}
+.touchpad .hz:active{color:#fff}
+.nav-mid{grid-column:2; grid-row:1 / span 1}
+
+/* ==========================================================================
+   Reference rail and the rest of the page furniture
+   ========================================================================== */
 .ref{
-  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
-  display:flex;flex-direction:column;max-height:calc(100vh - 130px);position:sticky;top:76px;
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  display:flex; flex-direction:column; max-height:calc(100vh - 130px); position:sticky; top:78px;
+  min-width:0;
 }
-@media (max-width:960px){ .ref{position:static;max-height:none} }
-.ref-head{padding:12px 13px 10px;border-bottom:1px solid var(--line)}
-.ref-head h2{margin:0 0 9px;font-size:13px;font-weight:650;display:flex;align-items:center;gap:7px}
-.ref-head .count{font-weight:400;color:var(--ink-faint);font-size:11.5px}
+@media (max-width:1000px){ .ref{position:static; max-height:520px} }
+.ref-head{padding:12px 13px 10px; border-bottom:1px solid var(--line)}
+.ref-head h2{margin:0 0 9px; font-size:13px; font-weight:650; display:flex; align-items:center; gap:7px}
+.ref-head .count{font-weight:400; color:var(--ink-faint); font-size:11.5px}
 #refSearch{
-  width:100%;border:1px solid var(--line);border-radius:9px;padding:7px 10px;
-  font-size:13px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:0;
+  width:100%; border:1px solid var(--line); border-radius:9px; padding:7px 10px;
+  font-size:13px; font-family:var(--sans); background:var(--bg); color:var(--ink); outline:0;
 }
 #refSearch:focus{border-color:var(--accent)}
-.ref-groups{overflow-y:auto;padding:6px 6px 12px}
+.ref-groups{overflow-y:auto; padding:6px 6px 12px}
 .ref-groups::-webkit-scrollbar{width:10px}
-.ref-groups::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:99px;border:3px solid var(--surface)}
+.ref-groups::-webkit-scrollbar-thumb{background:var(--line-strong); border-radius:99px; border:3px solid var(--surface)}
 .grp-label{
-  font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);
-  padding:11px 8px 5px;font-weight:600;
+  font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-faint);
+  padding:11px 8px 5px; font-weight:600;
 }
-.fn{border-radius:8px;padding:2px 3px}
+.fn{border-radius:8px; padding:2px 3px}
 .fn:hover{background:var(--bg)}
-.fn-head{display:flex;gap:8px;align-items:baseline;cursor:pointer;padding:4px 5px;border-radius:7px}
+.fn-head{display:flex; gap:8px; align-items:baseline; cursor:pointer; padding:4px 5px; border-radius:7px}
 .fn-name{
-  font-family:var(--mono);font-size:12px;color:var(--accent);background:none;border:0;
-  padding:0;cursor:pointer;text-align:left;white-space:nowrap;
+  font-family:var(--mono); font-size:12px; color:var(--accent); background:none; border:0;
+  padding:0; cursor:pointer; text-align:left; white-space:nowrap;
 }
-.fn-name:hover,.fn-name:focus-visible{text-decoration:underline;outline:none}
-.fn-sig{
-  font-family:var(--mono);font-size:11px;color:var(--ink-faint);flex:1 1 auto;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-}
-.fn .doc{
-  display:none;font-size:12px;color:var(--ink-soft);white-space:pre-wrap;
-  margin:2px 6px 7px;padding-left:9px;border-left:2px solid var(--line);
-  max-height:230px;overflow:auto;
-}
+.fn-name:hover,.fn-name:focus-visible{text-decoration:underline; outline:none}
+.fn-sig{font-family:var(--mono); font-size:11px; color:var(--ink-faint); flex:1 1 auto;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.fn .doc{display:none; font-size:12px; color:var(--ink-soft); white-space:pre-wrap;
+  margin:2px 6px 7px; padding-left:9px; border-left:2px solid var(--line); max-height:230px; overflow:auto}
 .fn.open .doc{display:block}
-.mini{
-  font-size:9.5px;border-radius:5px;padding:1px 5px;margin-left:6px;vertical-align:1px;
-  background:var(--surface-2);color:var(--ink-faint);
-}
-.mini.iter{background:var(--warn-soft);color:var(--warn)}
-.empty-note{padding:16px 10px;color:var(--ink-faint);font-size:13px;text-align:center}
+.mini{font-size:9.5px; border-radius:5px; padding:1px 5px; margin-left:6px; vertical-align:1px;
+  background:var(--surface-2); color:var(--ink-faint)}
+.mini.iter{background:var(--warn-soft); color:var(--warn)}
+.empty-note{padding:16px 10px; color:var(--ink-faint); font-size:13px; text-align:center}
 
-/* ---------- footer ---------- */
+.chips{display:flex; flex-wrap:wrap; gap:7px; align-items:center; justify-content:center; max-width:var(--dw)}
+.chips .lead{font-size:11.5px; color:var(--ink-faint)}
+.chip-btn{
+  font-family:var(--mono); font-size:11.5px; background:var(--surface); border:1px solid var(--line);
+  border-radius:999px; padding:4px 10px; cursor:pointer; color:var(--ink-soft);
+}
+.chip-btn:hover{color:var(--accent); border-color:var(--accent); background:var(--accent-soft)}
+.chip-btn.var{color:var(--good); border-color:transparent; background:var(--good-soft)}
+
 footer{
-  border-top:1px solid var(--line);padding:16px clamp(14px,3vw,32px) 26px;color:var(--ink-faint);
-  font-size:12px;max-width:1400px;margin:0 auto;width:100%;
+  border-top:1px solid var(--line); padding:16px clamp(14px,3vw,30px) 26px; color:var(--ink-faint);
+  font-size:12px; max-width:1240px; margin:0 auto; width:100%;
 }
 footer p{margin:0 0 5px}
-footer code{font-family:var(--mono);font-size:11.5px}
+footer code{font-family:var(--mono); font-size:11.5px}
 footer a{color:var(--ink-soft)}
 </style>
 </head>
@@ -266,46 +393,79 @@ footer a{color:var(--ink-soft)}
 
 <header class="topbar">
   <div class="brand">
-    <span class="logo">n</span>
     <div>
-      <h1>TI-Nspire Statistics</h1>
-      <p>Type what you would type on the handheld &mdash; computed locally, in Python.</p>
+      <h1>TI-Nspire CX II &mdash; statistics</h1>
+      <p>Type what you would type on the handheld. The calculator's own keys work.</p>
     </div>
   </div>
   <span class="spacer"></span>
   <span class="status" id="engineStatus">Starting the Python engine&hellip;</span>
-  <a class="ghost" id="repoLink" href="#" target="_blank" rel="noopener">Repository</a>
+  <button class="btn" id="resetBtn" type="button" title="Clear variables, history and stat.results">Reset</button>
+  <a class="btn" id="repoLink" href="#" target="_blank" rel="noopener">Repository</a>
 </header>
 
 <main class="layout">
-  <section class="calc">
-    <div class="screen" id="screen">
-      <div class="empty" id="emptyState">
-        <h2>Nothing computed yet.</h2>
-        <p>The syntax is the calculator's own, not Python's:</p>
-        <ul>
-          <li>a list is <code>{1,2,3}</code> &mdash; braces, and no spaces needed</li>
-          <li>an optional argument you skip stays an empty field: <code>tInterval v,sx,n,,0.95</code></li>
-          <li>every calculation parks its answer in <code>stat.</code> &mdash; read it back with <code>stat.Q1X</code>, or in the next line with <code>stat.v * 2</code></li>
-          <li>name a list with <code>A = {3,1,4}</code>, then use <code>A</code> anywhere an argument goes</li>
-        </ul>
-        <div class="factrow" id="factRow"></div>
+  <section class="stage">
+
+    <div class="device" id="device">
+      <div class="brandbar">
+        <span class="ti">Texas&nbsp;Instruments</span>
+        <span class="model">TI-Nspire<em>&trade;</em> CX&nbsp;II</span>
+      </div>
+
+      <div class="lcd-wrap">
+        <div class="lcd">
+          <div class="lcd-in">
+            <div class="statusbar">
+              <span class="pg" id="pageIndicator">1.1</span>
+              <span class="docname" id="docName">Stats</span>
+              <span class="smode" id="angleMode">RAD</span>
+              <svg width="13" height="7" viewBox="0 0 13 7" aria-hidden="true">
+                <rect x=".5" y=".5" width="10" height="6" rx="1.2" fill="none" stroke="currentColor"/>
+                <rect x="11.6" y="2.2" width="1.4" height="2.6" rx=".6" fill="currentColor"/>
+                <rect x="1.6" y="1.6" width="6" height="3.8" rx=".6" fill="currentColor"/>
+              </svg>
+            </div>
+            <div class="viewport" id="screen">
+              <div class="empty" id="emptyState"></div>
+            </div>
+            <form class="entryline" id="promptForm" autocomplete="off">
+              <span class="arrow">&#9656;</span>
+              <input id="cmd" type="text" spellcheck="false" autocapitalize="off" autocorrect="off"
+                     placeholder="OneVar {1,2,4,8,16}" aria-label="TI-Nspire command line">
+              <button class="hidden-submit" type="submit" tabindex="-1" aria-hidden="true">Run</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div class="pad" id="pad">
+        <div class="nav">
+          <div class="nav-col">
+            <button class="key k-sm" data-k="esc" title="Esc &mdash; clear the entry line">esc</button>
+            <button class="key k-sm" data-k="tab" title="Tab &mdash; jump to the function reference">tab</button>
+          </div>
+          <button class="touchpad" data-k="touchpad" title="Touchpad &mdash; move the cursor; press the centre to evaluate">
+            <span></span><span class="hz" data-pad="up">&#9650;</span><span></span>
+            <span class="hz" data-pad="left">&#9664;</span><span class="ce" data-pad="ok"></span><span class="hz" data-pad="right">&#9654;</span>
+            <span></span><span class="hz" data-pad="down">&#9660;</span><span></span>
+          </button>
+          <div class="nav-col">
+            <button class="key k-sm k-util" data-k="ctrl" title="Ctrl &mdash; the character printed above the next key">ctrl</button>
+            <button class="key k-sm" data-k="del" title="Del &mdash; delete the previous character">del</button>
+          </div>
+        </div>
+
+        <div class="grid g4" id="funcRow"></div>
+        <div class="grid g7" id="alphaGrid"></div>
+        <div class="grid g10" id="symGrid"></div>
+        <div class="grid g6" id="numGrid"></div>
       </div>
     </div>
 
-    <form class="prompt" id="promptForm" autocomplete="off">
-      <span class="caret">&#9656;</span>
-      <input id="cmd" type="text" spellcheck="false" autocapitalize="off" autocorrect="off"
-             placeholder="OneVar {1,2,4,8,16}" aria-label="TI-Nspire command">
-      <button class="btn primary" id="runBtn" type="submit" disabled>Run</button>
-      <button class="btn" id="resetBtn" type="button">Reset</button>
-    </form>
     <div class="chips">
       <span class="lead">Try:</span>
       <span id="exampleChips"></span>
-      <span class="hint" style="margin-left:auto">
-        <kbd>Enter</kbd> run &middot; <kbd>&uarr;</kbd><kbd>&darr;</kbd> history
-      </span>
     </div>
   </section>
 
@@ -320,13 +480,15 @@ footer a{color:var(--ink-soft)}
 
 <footer>
   <p id="footNote">
-    Function names, argument order and the <code>stat.</code> result names are copied from the
-    TI&#8209;Nspire Reference Guide. Everything runs in your browser &mdash; nothing is uploaded.
-    The first visit downloads the Python runtime once (about 11&nbsp;MB); your browser caches it
-    from then on, and no package installation is ever needed.
+    The front panel follows the TI&#8209;Nspire CX&nbsp;II layout; the keys and their names are from TI's
+    handheld key reference. Function names, argument order and the <code>stat.</code> result names are
+    copied from the TI&#8209;Nspire Reference Guide.
   </p>
   <p>
-    <code>Type "help" in the command box for a quick syntax card.</code>
+    Everything runs in your browser and nothing is uploaded. The Python interpreter is served from
+    this same site, so the page needs no third-party CDN &mdash; the first visit downloads it once
+    (about 13&nbsp;MB) and the browser keeps it. The <code>doc</code> key, or typing
+    <code>help</code>, shows the syntax card.
   </p>
 </footer>
 
@@ -335,10 +497,15 @@ footer a{color:var(--ink-soft)}
 <script>
 "use strict";
 /* ==========================================================================
-   UI layer.  The Python side is reached only through LA.dispatch({op, ...}).
+   The front panel.
+
+   Two jobs: build the keypad the way the handheld has it, and draw results the
+   way the handheld draws them.  The Python side is reached only through
+   LA.dispatch({op, ...}) -- nothing here knows any statistics.
    ========================================================================== */
 (function () {
   const REPO = "https://github.com/Franky100-pig/Digital-Nspire-for-Stats";
+
   const EXAMPLES = [
     "OneVar {1,2,4,8,16}",
     "LinRegMx {1,2,3,4,5},{5,8,11,14,17}",
@@ -346,151 +513,238 @@ footer a{color:var(--ink-soft)}
     "normCdf -1,1,0,1",
     "binomPdf 10,.3,4",
     "countif {1,2,3,9},?<3",
-    "\u03c722way {{10,20},{30,40}}",
+    "\u03c7\u00b22way {{10,20},{30,40}}",
     "ANOVA {1,2,3},{4,5,6},{7,8,9}"
   ];
-  const FACTS = [];
+
   const HELP = [
     "How to type these commands:",
     "",
-    "  {1,2,3}                 a list          (not [1,2,3])",
+    "  {1,2,3}                 a list            (not [1,2,3])",
     "  OneVar v[,Freq]         an argument you skip is an empty field",
     "  tInterval v,sx,n,,0.95  -> Freq omitted, CLevel given",
     "  A = {3,1,4,1,5}         name a value, then pass A anywhere",
-    "  OneVar A                use it",
     "  stat.v  stat.Q1X        read the last result back",
     "  stat.RegEqn(6)          evaluate a fitted equation",
-    "  countif A,?<3           the ? is the element placeholder",
-    "  countif A,2\u2264?\u22644       chained criteria",
-    "  Reset                   forget variables and results"
+    "  countif A,?<3           the ? stands for each element",
+    "  countif A,2\u2264?\u22644      chained criteria",
+    "",
+    "Arithmetic is the calculator's, not Python's:",
+    "",
+    "  2^3 = 8      not 1: ^ is a power sign here, not exclusive or",
+    "  6\u00d77  10\u00f74         \u00d7 \u00f7 \u00b7 and \u2212 all work",
+    "  \u221a16  \u221a(9+7)  3\u00b2    radical and superscripts work",
+    "  2\u03c0   3(4+1)          implicit multiplication works",
+    "  1.2E20  1.E-7           TI exponent notation, both ways",
+    "",
+    "On the keypad: ctrl then a letter gives its Greek letter,",
+    "del deletes, \u25b8\u203a starts a fresh page, and Reset clears everything."
   ].join("\n");
 
+  /* ---------- the keypad, as the CX II actually has it ---------- */
+  //: ctrl shows the second character printed above a key, which on this
+  //: keypad is the Greek letter -- so ctrl+a types alpha, exactly as the
+  //: handheld's modifier key does.
+  const GREEK = {
+    a:"\u03b1", b:"\u03b2", c:"\u03b3", d:"\u03b4", e:"\u03b5", f:"\u03b6", g:"\u03b7",
+    h:"\u03b8", i:"\u03b9", j:"\u03ba", k:"\u03bb", l:"\u03bc", m:"\u03bd", n:"\u03be",
+    o:"\u03bf", p:"\u03c0", q:"\u03c1", r:"\u03c3", s:"\u03c4", t:"\u03c5", u:"\u03c6",
+    v:"\u03c7", w:"\u03c8", x:"\u03c9"
+  };
+  const ALPHA_ROWS = ["abcdefg", "hijklmn", "opqrstu", "vwxyz,:"];
+  const SYMBOLS = ["{", "}", "[", "]", "(", ")", "\u2264", "\u2265", "?", "\u2260"];
+
+  //: A key either inserts a character (``ins``) or runs an action (``action``).
+  //: `sub` is the smaller legend printed above the main one, the way the
+  //: handheld prints the alternative a key offers under the modifier key.
+  const FUNC_ROW = [
+    { label: "doc", ins: null, action: "doc", cls: "k-fn", sub: "~" },
+    { label: "menu", ins: null, action: "menu", cls: "k-fn" },
+    { label: "var", ins: null, action: "var", cls: "k-fn" },
+    { label: "\u00bb", ins: null, action: "scratch", cls: "k-fn", sub: "scratchpad" }
+  ];
+  const NUM_GRID = [
+    { label: "\u03c0", ins: "\u03c0", cls: "k-op" },
+    { label: "7", ins: "7" }, { label: "8", ins: "8" }, { label: "9", ins: "9" },
+    { label: "\u00d7", ins: "\u00d7", cls: "k-op" }, { label: "\u00f7", ins: "\u00f7", cls: "k-op" },
+
+    { label: "e", ins: "e", cls: "k-op" },
+    { label: "4", ins: "4" }, { label: "5", ins: "5" }, { label: "6", ins: "6" },
+    { label: "\u2212", ins: "\u2212", cls: "k-op" }, { label: "+", ins: "+", cls: "k-op" },
+
+    { label: "^", ins: "^", cls: "k-op", sub: "x\u00b2" },
+    { label: "1", ins: "1" }, { label: "2", ins: "2" }, { label: "3", ins: "3" },
+    { label: "=", ins: "=", cls: "k-op" },
+    { label: "\u21b5", ins: null, action: "enter", cls: "k-enter" },
+
+    { label: "\u221a", ins: "\u221a", cls: "k-op" },
+    { label: "0", ins: "0" }, { label: ".", ins: "." },
+    { label: "(\u2212)", ins: "\u2212", cls: "k-op" },
+    { label: ",", ins: "," }, { label: "\"", ins: "\"" }
+  ];
+
   const el = (id) => document.getElementById(id);
-  const screen = el("screen"), cmd = el("cmd"), runBtn = el("runBtn");
+  const screen = el("screen"), cmd = el("cmd");
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  let history = [], hIndex = 0, busy = false;
+  let history = [], hIndex = 0, busy = false, greekNext = false;
   const variables = new Set();
 
-  /* ---------- rendering ---------- */
-  function block(o) {
-    const tag = document.createElement("div");
-    tag.innerHTML = o.html;
-    return tag.firstElementChild;
+  /* ---------- keypad construction ---------- */
+  // Built with the DOM rather than an HTML string: key text includes characters
+  // that must not be hand-encoded into an attribute.
+  function mkKey(spec) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "key " + (spec.cls || "");
+    if (spec.sub) {
+      const s = document.createElement("span");
+      s.className = "sub";
+      s.textContent = spec.sub;
+      btn.appendChild(s);
+    }
+    btn.appendChild(document.createTextNode(spec.label));
+    if (spec.action) btn.dataset.action = spec.action;
+    else btn.dataset.ins = spec.ins;
+    btn.title = spec.action ? spec.action : "Insert " + spec.ins;
+    return btn;
   }
 
+  function fill(host, specs) {
+    const box = el(host);
+    box.textContent = "";
+    specs.forEach((spec) => box.appendChild(mkKey(spec)));
+  }
+
+  function buildPad() {
+    fill("funcRow", FUNC_ROW);
+    const alpha = [];
+    ALPHA_ROWS.forEach((row) => Array.from(row).forEach((ch) => {
+      alpha.push({ label: ch, ins: ch, cls: "k-alpha", sub: GREEK[ch] });
+    }));
+    fill("alphaGrid", alpha);
+    fill("symGrid", SYMBOLS.map((ch) => ({ label: ch, ins: ch, cls: "k-sym" })));
+    fill("numGrid", NUM_GRID);
+  }
+
+  /* ---------- entry line ---------- */
+  function insert(text) {
+    const start = cmd.selectionStart == null ? cmd.value.length : cmd.selectionStart;
+    const end = cmd.selectionEnd == null ? start : cmd.selectionEnd;
+    cmd.value = cmd.value.slice(0, start) + text + cmd.value.slice(end);
+    const at = start + text.length;
+    cmd.setSelectionRange(at, at);
+    cmd.focus();
+  }
+  function backspace() {
+    const start = cmd.selectionStart, end = cmd.selectionEnd;
+    if (start == null) { cmd.value = cmd.value.slice(0, -1); return; }
+    if (start === end) {
+      if (start === 0) return;
+      cmd.value = cmd.value.slice(0, start - 1) + cmd.value.slice(end);
+      cmd.setSelectionRange(start - 1, start - 1);
+    } else {
+      cmd.value = cmd.value.slice(0, start) + cmd.value.slice(end);
+      cmd.setSelectionRange(start, start);
+    }
+    cmd.focus();
+  }
+  function moveCaret(delta) {
+    const at = cmd.selectionStart == null ? cmd.value.length : cmd.selectionStart;
+    const to = Math.max(0, Math.min(cmd.value.length, at + delta));
+    cmd.setSelectionRange(to, to);
+    cmd.focus();
+  }
+
+  /* ---------- drawing on the screen ---------- */
   function varsTable(vars, carry) {
-    const head =
-      '<div class="vars-head"><span class="title">stat.results</span>' +
-      (carry ? '<span class="badge carry">carried over &mdash; this command did not change stat</span>' : "") +
-      '<button class="copy" type="button">copy</button></div>';
+    const head = '<div class="tbl-h"><span>stat.results</span>' +
+      (carry ? '<span class="carry">carried over</span>' : "") +
+      '<button class="cp" type="button">copy</button></div>';
     const rows = vars.map((v) =>
-      '<tr><td class="vname">stat.' + esc(v.name) + '</td>' +
-      '<td class="vval is-' + esc(v.kind) + '">' + esc(v.text) +
-      (v.length !== null && v.length !== undefined
-        ? '<span class="mini">' + v.length + "</span>" : "") +
+      "<tr><td class=\"nm\">stat." + esc(v.name) + "</td><td class=\"vl " +
+      esc(v.kind) + "\">" + esc(v.text) +
+      (v.length === null || v.length === undefined ? "" : '<span class="len"> (' + v.length + ")</span>") +
       "</td></tr>").join("");
-    return '<div class="vars">' + head + '<table class="vars-t">' + rows + "</table></div>";
+    return '<div class="tbl">' + head + "<table>" + rows + "</table></div>";
   }
 
   function addEntry(text, r) {
     const empty = el("emptyState");
     if (empty) empty.remove();
-    let node;
+    const node = document.createElement("article");
+    node.className = "ent";
 
     if (!r.ok) {
       const e = r.error || {};
       const sig = e.signature
-        ? '<p class="sig">Expected: <code>' + esc(e.signature) + "</code></p>" : "";
+        ? '<span class="k">Expected: ' + esc(e.signature) + "</span><br>" : "";
       const sug = e.suggestInput
-        ? '<button class="suggest" type="button" data-input="' + esc(e.suggestInput) + '">' +
-          "Run <code>" + esc(e.suggest) + "</code> instead</button>" : "";
-      node = block({
-        html: '<article class="entry is-error">' +
-          '<div class="cmdline"><span class="caret">&#9656;</span><code>' + esc(text) + "</code></div>" +
-          '<div class="err"><div class="err-head"><span class="chip">' + esc(e.kind || "Error") + "</span>" +
-          (e.ti ? '<span class="chip ti">TI message</span>' : "") + "</div>" +
-          "<p>" + esc(e.message || "") + "</p>" + sig + sug + "</div></article>"
-      });
+        ? '<div class="dlg-f"><button type="button" class="suggest" data-input="' +
+          esc(e.suggestInput) + '">Run ' + esc(e.suggest || "") + "</button></div>" : "";
+      node.innerHTML =
+        '<div class="in is-bad"><span class="arrow">&#9656;</span><span>' + esc(text) + "</span></div>" +
+        '<div class="dlg"><div class="dlg-t">' + esc(e.kind || "Error") + "</div>" +
+        '<div class="dlg-b">' + esc(e.message || "") + (sig ? "<br>" + sig : "") + "</div>" +
+        (sug ? sug : '<div class="dlg-f"><button type="button" class="ok">OK</button></div>') +
+        "</div>";
     } else {
       const answer = r.assign ? r.label : r.summary;
-      const ansHTML = answer
-        ? '<div class="answer' + (r.assign ? " is-eq" : "") + '">' + esc(answer) + "</div>" : "";
-      const docHTML = r.doc
-        ? '<details class="docs"><summary>' + (r.assign ? "notes" : "signature &amp; notes") +
-          "</summary><pre>" + esc(r.doc) + "</pre></details>"
-        : "";
-      const varsHTML = (r.vars && r.vars.length) ? varsTable(r.vars, r.carry) : "";
-      node = block({
-        html: '<article class="entry">' +
-          '<div class="cmdline"><span class="caret">&#9656;</span><code>' + esc(text) + "</code></div>" +
-          ansHTML + varsHTML + docHTML + "</article>"
-      });
+      const out = answer
+        ? '<div class="out' + (r.assign ? " is-eq" : "") + '">' + esc(answer) + "</div>" : "";
+      const table = (r.vars && r.vars.length) ? varsTable(r.vars, r.carry) : "";
+      const doc = r.doc
+        ? '<pre class="note">' + esc(r.doc) + "</pre>" : "";
+      node.innerHTML =
+        '<div class="in"><span class="arrow">&#9656;</span><span>' + esc(text) + "</span></div>" +
+        out + table + doc;
     }
     screen.appendChild(node);
     screen.scrollTop = screen.scrollHeight;
-    return node;
   }
 
   function addNote(body) {
-    const node = block({
-      html: '<article class="entry"><pre class="note">' + esc(body) + "</pre></article>"
-    });
+    const node = document.createElement("article");
+    node.className = "ent";
+    node.innerHTML = '<pre class="note" style="margin:0">' + esc(body) + "</pre>";
     screen.appendChild(node);
     screen.scrollTop = screen.scrollHeight;
+  }
+
+  function clearScreen(message) {
+    screen.innerHTML = '<div class="empty" id="emptyState">' + message + "</div>";
   }
 
   function copyText(text, button) {
     const done = () => {
       const was = button.textContent;
       button.textContent = "copied";
-      setTimeout(() => { button.textContent = was; }, 1400);
+      setTimeout(() => { button.textContent = was; }, 1300);
+    };
+    const fallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.setAttribute("readonly", "");
+      ta.style.cssText = "position:fixed;top:-1000px";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); done(); } catch (e) { /* nothing to do */ }
+      document.body.removeChild(ta);
     };
     if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
-    } else {
-      fallbackCopy(text, done);
-    }
-  }
-  function fallbackCopy(text, done) {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.setAttribute("readonly", "");
-    ta.style.position = "fixed";
-    ta.style.top = "-1000px";
-    document.body.appendChild(ta);
-    ta.select();
-    try { document.execCommand("copy"); done(); } catch (e) { /* leave it to the user */ }
-    document.body.removeChild(ta);
-  }
-
-  function syncVariables() {
-    const host = el("exampleChips");
-    const chips = EXAMPLES.map((c) =>
-      '<button class="chip-btn" type="button" data-input="' + esc(c) + '">' + esc(c) + "</button>");
-    variables.forEach((name) => {
-      chips.push('<button class="chip-btn var" type="button" data-input="' + esc(name) +
-                 '">' + esc(name) + " (saved)</button>");
-    });
-    host.innerHTML = chips.join("");
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else { fallback(); }
   }
 
   /* ---------- running ---------- */
-  async function run(text) {
+  function run(text) {
     text = (text || "").trim();
     if (!text || busy) return;
-    if (text.toLowerCase() === "help") {
-      addNote(HELP);
-      history.push(text); hIndex = history.length;
-      return;
-    }
+    if (text.toLowerCase() === "help") { addNote(HELP); return; }
     if (!window.LA.ready) {
       addEntry(text, { ok: false, error: { kind: "NotReady",
-        message: "The Python engine is still loading. Give it a moment and press Enter again." } });
+        message: "The Python engine is still loading. Give it a moment, then press \u21b5 again." } });
       return;
     }
-    busy = true; runBtn.disabled = true;
     let r;
     try {
       r = window.LA.dispatch({ op: "run", input: text });
@@ -503,51 +757,114 @@ footer a{color:var(--ink-soft)}
       syncVariables();
     }
     history.push(text); hIndex = history.length;
-    busy = false; runBtn.disabled = false;
   }
+
+  /* ---------- actions bound to the keys that are not characters ---------- */
+  const ACTIONS = {
+    enter: () => { const v = cmd.value; cmd.value = ""; run(v); },
+    del: backspace,
+    // Esc clears the entry line and nothing else: on the handheld it backs out
+    // of whatever you are in, and wiping the results would not be that.
+    esc: () => { if (cmd.value) { cmd.value = ""; } cmd.focus(); },
+    tab: () => { const s = el("refSearch"); s.focus(); s.select(); },
+    doc: () => addNote(HELP),
+    menu: () => { const s = el("refSearch"); s.value = ""; s.dispatchEvent(new Event("input")); s.focus(); },
+    var: () => insert("stat."),
+    scratch: () => clearScreen("<b>New page.</b> Variables and <code>stat.results</code> are kept.")
+  };
+
+  function act(name) { const fn = ACTIONS[name]; if (fn) fn(); }
+
+  el("pad").addEventListener("click", (ev) => {
+    const padBtn = ev.target.closest("[data-pad]");
+    if (padBtn) {
+      const dir = padBtn.dataset.pad;
+      if (dir === "ok") return act("enter");
+      if (dir === "left") return moveCaret(-1);
+      if (dir === "right") return moveCaret(1);
+      if (dir === "up" || dir === "down") {
+        if (!history.length) return;
+        hIndex = Math.max(0, Math.min(history.length, hIndex + (dir === "up" ? -1 : 1)));
+        cmd.value = history[hIndex] || "";
+        cmd.focus();
+        return;
+      }
+      return;
+    }
+    const btn = ev.target.closest(".key");
+    if (!btn) return;
+    if (btn.dataset.action) return act(btn.dataset.action);
+    let text = btn.dataset.ins;
+    if (text == null) return;
+    if (greekNext) {
+      const letter = GREEK[text.toLowerCase()];
+      if (letter) { insert(letter); greekNext = false; return; }
+    }
+    insert(text);
+  });
+
+  // ctrl latches for exactly one character, like the handheld's modifier.
+  el("pad").addEventListener("pointerdown", (ev) => {
+    if (ev.target.closest('[data-k="ctrl"]')) greekNext = !greekNext;
+    const c = ev.target.closest(".key");
+    if (c && !c.dataset.action) { c.classList.add("down"); setTimeout(() => c.classList.remove("down"), 90); }
+  });
 
   screen.addEventListener("click", (ev) => {
     const sug = ev.target.closest(".suggest");
     if (sug) { cmd.value = sug.dataset.input; run(cmd.value); return; }
-    const cp = ev.target.closest(".copy");
+    if (ev.target.closest(".ok")) { ev.target.closest(".dlg").remove(); return; }
+    const cp = ev.target.closest(".cp");
     if (cp) {
-      const rows = cp.closest(".vars").querySelectorAll("table tr");
+      const rows = cp.closest(".tbl").querySelectorAll("table tr");
       const lines = Array.from(rows).map((tr) =>
-        "stat." + tr.children[0].textContent + " = " + tr.children[1].childNodes[0].textContent);
+        "stat." + tr.children[0].textContent + " = " + tr.children[1].textContent.trim());
       copyText(lines.join("\n"), cp);
     }
   });
+
+  el("promptForm").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const v = cmd.value; cmd.value = ""; run(v);
+  });
+
+  cmd.addEventListener("keydown", (ev) => {
+    if (ev.key === "ArrowUp" && history.length) {
+      ev.preventDefault();
+      hIndex = Math.max(0, hIndex - 1); cmd.value = history[hIndex] || "";
+    } else if (ev.key === "ArrowDown" && history.length) {
+      ev.preventDefault();
+      hIndex = Math.min(history.length, hIndex + 1); cmd.value = history[hIndex] || "";
+    } else if (ev.key === "Escape") {
+      ev.preventDefault(); act("esc");
+    }
+  });
+
+  el("resetBtn").addEventListener("click", () => {
+    if (window.LA.ready) window.LA.dispatch({ op: "reset" });
+    variables.clear(); syncVariables();
+    history = []; hIndex = 0;
+    clearScreen("<b>Reset.</b> Variables, history and <code>stat.results</code> are cleared.");
+    cmd.focus();
+  });
+
+  function syncVariables() {
+    const chips = EXAMPLES.map((c) =>
+      '<button class="chip-btn" type="button" data-input="' + esc(c) + '">' + esc(c) + "</button>");
+    variables.forEach((name) => {
+      chips.push('<button class="chip-btn var" type="button" data-input="' + esc(name) + '">' +
+                 esc(name) + " (saved)</button>");
+    });
+    el("exampleChips").innerHTML = chips.join("");
+  }
   el("exampleChips").addEventListener("click", (ev) => {
     const b = ev.target.closest("[data-input]");
     if (b) { cmd.value = b.dataset.input; cmd.focus(); }
   });
 
-  el("promptForm").addEventListener("submit", (ev) => { ev.preventDefault(); const v = cmd.value; cmd.value = ""; run(v); });
-  el("resetBtn").addEventListener("click", () => {
-    if (window.LA.ready) window.LA.dispatch({ op: "reset" });
-    variables.clear(); syncVariables();
-    const s = el("screen"); s.innerHTML = "";
-    const e = document.createElement("div");
-    e.className = "empty"; e.id = "emptyState";
-    e.innerHTML = "<h2>Session reset.</h2><p>Variables and <code>stat.results</code> are cleared.</p>" +
-                  '<div class="factrow" id="factRow"></div>';
-    s.appendChild(e);
-    fillFacts();
-    cmd.focus();
-  });
-  cmd.addEventListener("keydown", (ev) => {
-    if (ev.key === "ArrowUp" && history.length) {
-      ev.preventDefault(); hIndex = Math.max(0, hIndex - 1); cmd.value = history[hIndex] || "";
-    } else if (ev.key === "ArrowDown" && history.length) {
-      ev.preventDefault(); hIndex = Math.min(history.length, hIndex + 1);
-      cmd.value = history[hIndex] || "";
-    }
-  });
-
   /* ---------- reference rail ---------- */
-  function shortSig(sig) {
-    return String(sig || "").split("\n")[0].replace(/`/g, "").split(" -- ")[0].trim().replace(/\.$/, "");
-  }
+  const shortSig = (sig) =>
+    String(sig || "").split("\n")[0].replace(/`/g, "").split(" -- ")[0].trim().replace(/\.$/, "");
 
   function renderRef(functions) {
     const groups = {};
@@ -566,24 +883,22 @@ footer a{color:var(--ink-soft)}
     }).join("");
   }
 
-  // The name inserts the call; the rest of the row shows the reference notes.
   el("refGroups").addEventListener("click", (ev) => {
     const row = ev.target.closest(".fn");
     if (!row) return;
     if (ev.target.closest(".fn-name")) {
-      cmd.value = row.dataset.name + " ";
-      cmd.focus();
-      return;
+      cmd.value = row.dataset.name + " "; cmd.focus(); return;
     }
-    if (ev.target.closest(".doc")) return; // reading, not toggling
+    if (ev.target.closest(".doc")) return;
     row.classList.toggle("open");
   });
+
   el("refSearch").addEventListener("input", (ev) => {
     const q = ev.target.value.trim().toLowerCase();
     document.querySelectorAll("#refGroups .fn").forEach((n) => {
       const hit = !q || n.dataset.name.toLowerCase().includes(q);
       n.style.display = hit ? "" : "none";
-      if (q && hit) { const d = n.classList; d.remove("open"); }
+      if (q && hit) n.classList.remove("open");
     });
     document.querySelectorAll("#refGroups .grp-label").forEach((label) => {
       let any = false, s = label.nextElementSibling;
@@ -596,29 +911,22 @@ footer a{color:var(--ink-soft)}
   });
 
   /* ---------- boot ---------- */
-  function fillFacts() {
-    const row = el("factRow");
-    if (row) row.innerHTML = FACTS.map((f) => '<span class="fact">' + f + "</span>").join("");
-  }
   el("repoLink").href = REPO;
+  buildPad();
   syncVariables();
-  fillFacts();
+  clearScreen(
+    "<b>Ready.</b> Type on the keypad, or use your own keyboard.<br>" +
+    "A list is <code>{1,2,3}</code>; an argument you skip stays empty:<br>" +
+    "<code>tInterval v,sx,n,,0.95</code>.<br>" +
+    "The <code>doc</code> key shows the syntax card."
+  );
 
   window.LA.readyPromise.then(() => {
-    runBtn.disabled = false;
     cmd.focus();
     const cat = window.LA.dispatch({ op: "catalog" });
     const fns = cat.functions || [];
     renderRef(fns);
     el("refCount").textContent = fns.length + " names";
-    const iterative = fns.filter((f) => f.fidelity === "iterative").length;
-    const groups = new Set(fns.map((f) => f.groupLabel)).size;
-    FACTS.length = 0;
-    FACTS.push("<b>" + fns.length + "</b> catalog names, spelled as the guide spells them");
-    FACTS.push("<b>" + groups + "</b> menus covered");
-    FACTS.push("<b>" + iterative + "</b> iterative fits");
-    FACTS.push("first load ~11 MB, then cached");
-    fillFacts();
     window.__laCatalog = fns;
   });
 })();
