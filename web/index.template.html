@@ -291,6 +291,13 @@ body.engine-failed .status{color:var(--bad); background:var(--bad-soft); border-
   padding:0 1px;
 }
 .key:active,.key.down{transform:translateY(1px); filter:brightness(1.22)}
+/* the modifier key stays lit while it is armed */
+.key.latched{
+  transform:translateY(1px);
+  background:var(--acc); color:#fff;
+  box-shadow:0 0 0 1px var(--acc), 0 0 10px -2px var(--acc);
+}
+.key.latched *{color:#fff}
 .key:focus-visible{outline:2px solid var(--acc); outline-offset:1px}
 .key .sub{
   position:absolute; top:calc(var(--du)*.5); left:calc(var(--du)*1);
@@ -793,21 +800,46 @@ footer a{color:var(--ink-soft)}
     }
     const btn = ev.target.closest(".key");
     if (!btn) return;
-    if (btn.dataset.action) return act(btn.dataset.action);
+    // Keys drawn by the builders carry the action in data-action.  The five in
+    // the control cluster are written out in the markup and carry the key's
+    // name in data-k instead.  Both name the same actions, so read both --
+    // without this the esc, tab and del keys were decoration.
+    const action = btn.dataset.action || btn.dataset.k;
+    if (action && ACTIONS[action]) return act(action);
     let text = btn.dataset.ins;
     if (text == null) return;
     if (greekNext) {
+      // The modifier is spent on the next key whatever that key is, the way
+      // the handheld's does -- a latch that survives a digit press is a latch
+      // that surprises you two keys later.
+      disarmCtrl();
       const letter = GREEK[text.toLowerCase()];
-      if (letter) { insert(letter); greekNext = false; return; }
+      insert(letter || text);
+      return;
     }
     insert(text);
   });
 
   // ctrl latches for exactly one character, like the handheld's modifier.
+  function disarmCtrl() {
+    greekNext = false;
+    const k = document.querySelector('[data-k="ctrl"]');
+    if (k) k.classList.remove("latched");
+  }
+
   el("pad").addEventListener("pointerdown", (ev) => {
-    if (ev.target.closest('[data-k="ctrl"]')) greekNext = !greekNext;
+    const ctrl = ev.target.closest('[data-k="ctrl"]');
+    if (ctrl) {
+      greekNext = !greekNext;
+      // Show the latch: a modifier that changes what the next key means has to
+      // say so, or the Greek letter arrives as a surprise.
+      ctrl.classList.toggle("latched", greekNext);
+    }
     const c = ev.target.closest(".key");
-    if (c && !c.dataset.action) { c.classList.add("down"); setTimeout(() => c.classList.remove("down"), 90); }
+    if (c && !c.classList.contains("latched")) {
+      c.classList.add("down");
+      setTimeout(() => c.classList.remove("down"), 90);
+    }
   });
 
   screen.addEventListener("click", (ev) => {
@@ -837,6 +869,12 @@ footer a{color:var(--ink-soft)}
       hIndex = Math.min(history.length, hIndex + 1); cmd.value = history[hIndex] || "";
     } else if (ev.key === "Escape") {
       ev.preventDefault(); act("esc");
+    } else if (greekNext && ev.key.length === 1) {
+      // The modifier works from the physical keyboard too, or the key would be
+      // half a key: armed for the mouse and inert for the fingers.
+      const letter = GREEK[ev.key.toLowerCase()];
+      disarmCtrl();
+      if (letter) { ev.preventDefault(); insert(letter); }
     }
   });
 
