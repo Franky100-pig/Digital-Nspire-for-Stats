@@ -19,6 +19,7 @@ import inspect
 from builtins import sorted as _sorted
 
 from . import legacy as _legacy
+from . import menu as _menu
 from .statvar import ASCII_ALIASES
 
 #: The quarantined names, re-exported from :mod:`legacy` rather than kept as a
@@ -32,6 +33,7 @@ __all__ = [
     "MENU",
     "NOT_NSPIRE",
     "NOT_TI",
+    "OFF_MENU",
     "TI_SPELLING_OVERRIDES",
     "ascii_name",
     "catalog",
@@ -130,42 +132,33 @@ NOT_NSPIRE = NOT_TI | LEGACY_TI84_NAMES
 #: emits the three coarse kinds; ``legacy_kind`` carries the precise one.
 LEGACY_KINDS = _legacy.KINDS
 
-#: The calculator's menus, by path.  Used by ``menu_tree`` and the README.
-MENU = {
-    "Statistics > List Math": [
-        "mean", "median", "product", "min", "max", "sum", "count", "countif",
-        "sumIf", "stDevSamp", "stDevPop", "varSamp", "varPop", "SortA", "SortD",
-        "cumulativeSum", "ΔList", "freqTable_to_list", "frequency", "corrMat",
-    ],
-    "Statistics > Stat Calculations (one and two variables)": [
-        "OneVar", "TwoVar", "FiveNumSummary",
-    ],
-    "Statistics > Stat Calculations (regressions)": [
-        "LinRegMx", "LinRegBx", "QuadReg", "CubicReg", "QuartReg", "LnReg",
-        "ExpReg", "PowerReg", "MedMed", "Logistic", "LogisticD", "SinReg",
-        "MultReg", "MultRegTests", "MultRegIntervals", "LinRegtIntervals",
-        "LinRegtTest",
-    ],
-    "Statistics > Distributions > Continuous": [
-        "normPdf", "normCdf", "invNorm", "tPdf", "tCdf", "invt",
-        "χ2Pdf", "χ2Cdf", "invχ2", "FPdf", "FCdf", "invF",
-    ],
-    "Statistics > Distributions > Discrete": [
-        "binomPdf", "binomCdf", "invBinom", "invBinomN", "poissPdf", "poissCdf",
-        "geomPdf", "geomCdf",
-    ],
-    "Catalog > Random": [
+#: The device's menus, by breadcrumb path.  Built from
+#: :mod:`tinspire_stats.menu` rather than written out a second time, because a
+#: second copy is a second thing to be wrong.  The hand-written version this
+#: replaces filed ``countif`` under List Math and split Distributions into
+#: Continuous and Discrete; the handheld does neither.
+MENU: dict = {}
+for _path, _crumb, _item in _menu.menu_paths("calculator"):
+    if not _item.function or _item.function == _menu.STAT_RESULTS:
+        continue  # categories outside statistics, and the stat.results variable
+    MENU.setdefault(" > ".join(_crumb[1:]), []).append(_item.function)
+del _path, _crumb, _item
+
+#: Names with no entry in the menus above: reached by typing them, or living in
+#: a branch of the handheld this package does not cover.  Kept out of ``MENU``
+#: on purpose -- filing a name under a menu it is not on is the mistake this
+#: split exists to prevent.
+OFF_MENU = {
+    # Probability > Random is a real submenu.  The package's own menu marks the
+    # whole Probability branch unsupported, so these have no front door here.
+    "Probability > Random": [
         "RandSeed", "rand", "randInt", "randNorm", "randBin", "randSamp",
     ],
-    "Statistics > Confidence Intervals": [
-        "zInterval", "tInterval", "zInterval_2Samp", "tInterval_2Samp",
-        "zInterval_1Prop", "zInterval_2Prop",
+    "Typed, no menu item of their own": [
+        "FiveNumSummary", "invBinom", "invBinomN",
+        "count", "countif", "sumIf", "frequency", "freqTable_to_list",
     ],
-    "Statistics > Stat Tests": [
-        "zTest", "tTest", "zTest_2Samp", "tTest_2Samp", "FTest_2Samp",
-        "zTest_1Prop", "zTest_2Prop", "χ2GOF", "χ22way", "ANOVA", "ANOVA2way",
-    ],
-    "Catalog (misc statistics)": ["CopyVar", "copy_to_stat_group"],
+    "Catalog": ["CopyVar", "copy_to_stat_group"],
 }
 
 _MODULES = [
@@ -318,7 +311,12 @@ def lookup(name: str):
 
 
 def menu_tree():
-    """``MENU`` with every entry resolved to the live function object."""
+    """``MENU`` with every entry resolved to the live function object.
+
+    The paths are the device's own, and the order is the order the menu prints,
+    so this doubles as an answer to "what would I press to get to X" -- see
+    :func:`tinspire_stats.menu.resolve` for the numbered walk.
+    """
     return {path: [lookup(n) for n in names] for path, names in MENU.items()}
 
 
