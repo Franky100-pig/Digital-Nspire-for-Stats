@@ -101,6 +101,27 @@ def test_a_name_that_is_not_a_variable_name_is_refused(s):
         s.set_name("A", "two words")
 
 
+def test_a_name_the_calculator_already_uses_is_refused(s):
+    """TI: "You cannot use a preassigned variable or function name".
+
+    The refusal has to happen at the point of typing the name.  A column
+    called `mean` would otherwise look named and be unreachable from the
+    Calculator page, which resolves `mean` to the function first.
+    """
+    for taken in ("mean", "min", "OneVar", "stat", "pi", "e", "ans"):
+        with pytest.raises(sh.SheetError, match="already uses"):
+            s.set_name("A", taken)
+    # and the name is not left behind by the refusal
+    assert s.names() == {}
+
+
+def test_the_reserved_names_are_the_calculators_own(s):
+    """Derived from the namespace, not from a second list to keep in step."""
+    reserved = sh.reserved_names()
+    assert "mean" in reserved and "stat" in reserved and "e" in reserved
+    assert "mshoe" not in reserved and "die1" not in reserved
+
+
 def test_two_columns_cannot_share_a_name(s):
     s.set_name("A", "data")
     with pytest.raises(sh.SheetError):
@@ -400,6 +421,28 @@ def test_the_snapshot_shows_whole_numbers_without_a_decimal_tail(s):
     cells = s.snapshot()["columns"][0]["cells"]
     assert cells["1"] == "4"
     assert cells["2"] == "4.25"
+
+
+def test_a_void_inside_the_list_is_an_underscore(s):
+    """"Any empty (void) element in a list is displayed as an underscore".
+
+    Only inside the list, though: past the end of the data the cell is blank,
+    because there is no element there to be void.
+    """
+    for row, value in enumerate(["1", "", "3"], start=1):
+        s.set_cell("A", row, value)
+    cells = s.snapshot()["columns"][0]["cells"]
+    assert cells["1"] == "1"
+    assert cells["2"] == "_"
+    assert cells["3"] == "3"
+    assert cells["4"] == ""          # past the end of the list
+    assert cells[str(s.rows)] == ""
+
+
+def test_display_of_a_void_is_the_glyph():
+    assert sh.display(None) == sh.VOID_GLYPH == "_"
+    assert sh.display(7) == "7"
+    assert sh.display(7.5) == "7.5"
 
 
 def test_clear_all_empties_the_grid(s):

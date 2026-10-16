@@ -59,13 +59,19 @@ import re
 __all__ = [
     "Sheet",
     "Column",
+    "TiList",
     "SheetError",
     "MAX_COLUMNS",
     "MAX_ROWS",
+    "RESERVED_NAMES",
+    "VOID_GLYPH",
     "letter_of",
     "index_of",
     "valid_column_letter",
     "valid_list_name",
+    "reserved_names",
+    "statistics_functions",
+    "display",
     "shift_for_fill",
     "evaluate",
 ]
@@ -116,6 +122,28 @@ def valid_list_name(name: str) -> bool:
     would refuse, so the page cannot promise a name the other page rejects.
     """
     return bool(re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", str(name).strip()))
+
+
+#: Names the Calculator page owns before the user arrives.  TI refuses to let a
+#: variable be called one of these -- "You cannot use a preassigned variable or
+#: function name, such as ans or min" -- and the reason matters here: a column
+#: named ``mean`` would be a column the Calculator page could never reach,
+#: because ``mean`` resolves to the function first.  Refusing the name at the
+#: point of typing it is the only place the problem is visible.
+RESERVED_NAMES = frozenset({
+    "ans", "stat", "math", "e", "\u03c0", "pi", "\u221e", "inf",
+    "true", "false",
+})
+
+
+def reserved_names() -> frozenset:
+    """``RESERVED_NAMES`` plus every function the Calculator page already has.
+
+    Taken from the package's own namespace rather than from a second hand-kept
+    list: the set that matters is whatever the Calculator page will look a name
+    up in, and that is this same namespace.
+    """
+    return RESERVED_NAMES | frozenset(statistics_functions())
 
 
 # --------------------------------------------------------------------------
@@ -478,12 +506,19 @@ class Sheet:
         A name on an empty column defines nothing, which is what the device
         does: naming a column and leaving it blank does not put an empty list
         into the variable list.
+
+        A column whose formula cannot be worked out defines nothing either.  The
+        error is the cell's to report, and a variable list that refused to be
+        read because one cell was broken would take the whole session with it.
         """
         out = {}
         for column in self.columns.values():
             if not column.name:
                 continue
-            values = column.values(self.rows)
+            try:
+                values = column.values(self.rows)
+            except SheetError:
+                continue
             if any(v is not None for v in values):
                 out[column.name] = values
         return out
@@ -508,6 +543,10 @@ class Sheet:
                 raise SheetError(
                     f"{name!r} cannot be a list name -- a letter first, "
                     "then letters, digits or _"
+                )
+            if name in reserved_names():
+                raise SheetError(
+                    f"{name} is a name the calculator already uses"
                 )
             owner = self.names().get(name)
             if owner and owner != letter:
@@ -649,7 +688,14 @@ class Sheet:
 
     # -- the screen --------------------------------------------------------
     def snapshot(self) -> dict:
-        """Everything the page needs to draw the grid and the variable list."""
+        """Everything the page needs to draw the grid and the variable list.
+
+        A cell is filled while it is inside the column's list and blank past
+        the end of it.  That distinction is the device's: the eGuide says "any
+        empty (void) element in a list is displayed as an underscore", and the
+        underscores stop where the list stops -- they do not run to the bottom
+        of the screen.
+        """
         return {
             "rows": self.rows,
             "columns": [
@@ -657,23 +703,64 @@ class Sheet:
                     "letter": letter,
                     "name": self.columns[letter].name,
                     "formula": self.columns[letter].formula,
-                    "cells": {str(row): display(self.columns[letter].value_at(row))
-                              for row in range(1, self.rows + 1)},
+                    "cells": self._screen_column(self.columns[letter]),
                 }
                 for letter in self.columns
             ],
             "bindings": self.bindings(),
         }
 
+    def _screen_column(self, column: "Column") -> dict:
+        """One column as the screen shows it: values, voids, and errors.
+
+        The extent of the list is what decides where the underscores stop, and
+        that is ``values()``.  A column where something cannot be worked out
+        goes the other way round -- see below.
+        """
+        try:
+            values = column.values(self.rows)
+        except SheetError:
+            return self._screen_column_showing_errors(column)
+        return {str(row): (display(values[row - 1]) if row <= len(values) else "")
+                for row in range(1, self.rows + 1)}
+
+    def _screen_column_showing_errors(self, column: "Column") -> dict:
+        """The same, row by row, so one unworkable cell does not blank the sheet.
+
+        A formula with a mistake in it applies to every row of its column, so
+        this is usually every row -- which is what the device does too.  The
+        point is that the message lands *in the cell*.  A grid that could not be
+        drawn at all because one cell was wrong would turn a mistake the user
+        can see and fix into a blank page.
+        """
+        texts, last = {}, 0
+        for row in range(1, self.rows + 1):
+            if column.raw_at(row) == "":
+                continue                     # nothing here: past the end
+            try:
+                texts[row] = display(column.value_at(row))
+            except SheetError as exc:
+                texts[row] = f"Error: {exc.ti_message}"
+            last = row
+        return {str(row): (texts[row] if row <= last else "")
+                for row in range(1, self.rows + 1)}
+
+
+#: What the device prints in a cell whose element is void.
+VOID_GLYPH = "_"
+
 
 def display(value) -> str:
-    """One cell value as the screen shows it: a number, or nothing."""
+    """One cell value as the screen shows it.
+
+    A void is an underscore, not a blank: the device uses the blank for a cell
+    outside the list and the underscore for an element the list has but cannot
+    show a value for.
+    """
     if value is None:
-        return ""
+        return VOID_GLYPH
     if isinstance(value, bool):
         return "1" if value else "0"
-    if isinstance(value, float) and not value.is_integer():
-        return _short_float(value)
     return _short_float(value)
 
 
