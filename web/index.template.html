@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="la-entry-module" content="{{ENTRY_MODULE}}">
+<title>TI-Nspire Statistics &mdash; in the browser</title>
+<meta name="description" content="Type TI-Nspire statistics commands and get the calculator's own results, computed in your browser by Python (WebAssembly). 84 catalog names, identical spelling.">
+<link rel="preconnect" href="https://fastly.jsdelivr.net" crossorigin>
+<link rel="dns-prefetch" href="https://fastly.jsdelivr.net">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="dns-prefetch" href="https://unpkg.com">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6fed'/%3E%3Ctext x='16' y='23' font-family='Georgia,serif' font-size='19' fill='white' text-anchor='middle'%3En%3C/text%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#ffffff;
+  --surface:#f7f9fc;
+  --surface-2:#eef2f8;
+  --line:#e3e9f2;
+  --line-strong:#cdd7e5;
+  --ink:#1c2739;
+  --ink-soft:#5a6b82;
+  --ink-faint:#8a97a8;
+  --accent:#2f6fed;
+  --accent-soft:#eaf1ff;
+  --good:#12805a;
+  --good-soft:#e6f5ee;
+  --warn:#9a6300;
+  --warn-soft:#fdf3e0;
+  --bad:#c0392b;
+  --bad-soft:#fdeceb;
+  --radius:12px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0e1621; --surface:#151f2e; --surface-2:#1b2739; --line:#243247;
+    --line-strong:#33445e; --ink:#e8eef7; --ink-soft:#a9b8cc; --ink-faint:#7b8ba1;
+    --accent:#6d9bff; --accent-soft:#1a2740; --good:#4fd1a0; --good-soft:#122e26;
+    --warn:#e0b355; --warn-soft:#2c2415; --bad:#f08a80; --bad-soft:#2e1a19;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--sans);
+  font-size:15px; line-height:1.55; -webkit-font-smoothing:antialiased;
+  display:flex; flex-direction:column; min-height:100vh;
+}
+
+/* ---------- top bar ---------- */
+.topbar{
+  display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+  padding:14px clamp(14px,3vw,32px); border-bottom:1px solid var(--line);
+  position:sticky; top:0; z-index:20; background:var(--bg);
+}
+.brand{display:flex; align-items:center; gap:11px; min-width:0}
+.logo{
+  width:34px;height:34px;border-radius:9px;background:var(--accent);color:#fff;
+  display:grid;place-items:center;font-family:Georgia,serif;font-size:20px;
+  font-weight:600;flex:0 0 auto;
+}
+.brand h1{margin:0;font-size:16px;font-weight:650;letter-spacing:-.01em;white-space:nowrap}
+.brand p{margin:1px 0 0;font-size:12.5px;color:var(--ink-soft)}
+.spacer{flex:1 1 auto}
+.status{
+  font-size:12px;color:var(--ink-soft);background:var(--surface);
+  border:1px solid var(--line);border-radius:999px;padding:4px 12px;
+  max-width:min(52ch,60vw);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+body.engine-ready .status{color:var(--good);background:var(--good-soft);border-color:transparent}
+body.engine-failed .status{color:var(--bad);background:var(--bad-soft);border-color:transparent}
+.ghost{
+  font-size:12.5px;color:var(--ink-soft);text-decoration:none;border:1px solid var(--line);
+  border-radius:999px;padding:5px 13px;white-space:nowrap;
+}
+.ghost:hover{color:var(--accent);border-color:var(--accent)}
+
+/* ---------- layout ---------- */
+.layout{
+  flex:1 1 auto; display:grid; gap:clamp(14px,2vw,22px);
+  grid-template-columns:minmax(0,1.6fr) minmax(300px,.95fr);
+  padding:clamp(14px,3vw,28px) clamp(14px,3vw,32px) 28px;
+  align-items:start; max-width:1400px; width:100%; margin:0 auto;
+}
+@media (max-width:960px){ .layout{grid-template-columns:1fr} }
+
+/* ---------- calculator ---------- */
+.calc{display:flex;flex-direction:column;gap:12px;min-width:0}
+.screen{
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  padding:14px 16px; min-height:340px; max-height:min(64vh,700px); overflow-y:auto;
+  scroll-behavior:smooth;
+}
+.screen::-webkit-scrollbar{width:10px}
+.screen::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:99px;border:3px solid var(--surface)}
+
+.empty h2{margin:4px 0 8px;font-size:15px;font-weight:650}
+.empty p{margin:0 0 8px;color:var(--ink-soft);font-size:13.5px}
+.empty ul{margin:0 0 12px;padding-left:20px;color:var(--ink-soft);font-size:13.5px}
+.empty li{margin:3px 0}
+.empty code{font-family:var(--mono);font-size:12.5px;background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+.factrow{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.fact{font-size:11.5px;color:var(--ink-soft);background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:3px 10px}
+.fact b{color:var(--ink);font-weight:600}
+
+.entry{border-top:1px solid var(--line);padding:11px 0 13px}
+.entry:first-child{border-top:0;padding-top:2px}
+.cmdline{display:flex;gap:9px;align-items:baseline}
+.caret{color:var(--accent);font-weight:700;flex:0 0 auto}
+.cmdline code{font-family:var(--mono);font-size:13.5px;color:var(--ink);word-break:break-word;flex:1 1 auto}
+.entry.is-error .cmdline code{color:var(--bad)}
+pre.note{
+  margin:0;font-family:var(--mono);font-size:12px;line-height:1.6;color:var(--ink-soft);
+  background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 13px;
+  white-space:pre-wrap;overflow:auto;
+}
+.answer{
+  font-family:var(--mono);font-size:14px;color:var(--accent);margin:6px 0 0 22px;
+  word-break:break-word;white-space:pre-wrap;
+}
+.answer.is-eq{color:var(--ink)}
+.docs{margin:6px 0 0 22px}
+.docs summary{font-size:11.5px;color:var(--ink-faint);cursor:pointer;list-style:none;display:inline-block}
+.docs summary::-webkit-details-marker{display:none}
+.docs summary:hover{color:var(--accent)}
+.docs pre{
+  margin:6px 0 0;font-family:var(--mono);font-size:12px;line-height:1.5;color:var(--ink-soft);
+  background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:10px 12px;
+  white-space:pre-wrap;max-height:230px;overflow:auto;
+}
+
+/* stat.results table */
+.vars{margin:9px 0 0 22px;background:var(--bg);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.vars-head{
+  display:flex;align-items:center;gap:8px;padding:7px 11px;border-bottom:1px solid var(--line);
+  background:var(--surface-2);
+}
+.vars-head .title{font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);letter-spacing:.02em}
+.badge{font-size:10.5px;border-radius:999px;padding:2px 8px;font-weight:500}
+.badge.carry{background:var(--warn-soft);color:var(--warn)}
+.copy{margin-left:auto;background:none;border:0;color:var(--ink-faint);font-size:11px;cursor:pointer;padding:2px 4px}
+.copy:hover{color:var(--accent)}
+table.vars-t{width:100%;border-collapse:collapse;font-size:12.5px}
+table.vars-t td{padding:4px 11px;border-top:1px solid var(--line);vertical-align:top}
+table.vars-t tr:first-child td{border-top:0}
+.vname{color:var(--ink-soft);white-space:nowrap;width:1%;padding-right:16px}
+.vval{font-family:var(--mono);color:var(--ink);word-break:break-word;text-align:right}
+.vval.is-list{color:var(--ink)}
+.vval.is-eq{color:var(--accent)}
+
+/* error card */
+.err{
+  margin:8px 0 0 22px;background:var(--bad-soft);border:1px solid transparent;
+  border-radius:10px;padding:10px 12px;
+}
+.err-head{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+.chip{font-family:var(--mono);font-size:10.5px;background:var(--bg);color:var(--bad);border-radius:6px;padding:2px 7px}
+.chip.ti{color:var(--accent)}
+.err p{margin:0;font-size:13px;color:var(--ink);white-space:pre-wrap}
+.err .sig{margin-top:6px;font-size:12px;color:var(--ink-soft)}
+.err .sig code{font-family:var(--mono);font-size:12px;background:var(--bg);border-radius:5px;padding:1px 6px}
+.suggest{
+  margin-top:9px;background:var(--bg);border:1px solid var(--line-strong);color:var(--accent);
+  border-radius:8px;padding:5px 11px;font-size:12.5px;cursor:pointer;font-family:var(--sans);
+}
+.suggest:hover{border-color:var(--accent)}
+.suggest code{font-family:var(--mono);font-size:12px}
+
+/* prompt */
+.prompt{
+  display:flex;align-items:center;gap:10px;background:var(--surface);
+  border:1px solid var(--line-strong);border-radius:var(--radius);padding:9px 11px;
+  transition:border-color .15s,box-shadow .15s;
+}
+.prompt:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.prompt .caret{font-size:15px}
+#cmd{
+  flex:1 1 auto;border:0;background:none;outline:0;color:var(--ink);
+  font-family:var(--mono);font-size:14.5px;min-width:0;padding:3px 0;
+}
+#cmd::placeholder{color:var(--ink-faint)}
+.btn{
+  border:1px solid var(--line-strong);background:var(--bg);color:var(--ink-soft);
+  border-radius:9px;padding:6px 13px;font-size:13px;font-family:var(--sans);cursor:pointer;
+  white-space:nowrap;
+}
+.btn:hover{color:var(--accent);border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.07);color:#fff}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.hint{font-size:11.5px;color:var(--ink-faint);margin-left:2px}
+.hint kbd{
+  font-family:var(--mono);font-size:10.5px;background:var(--surface-2);border-radius:4px;
+  padding:1px 5px;color:var(--ink-soft);
+}
+
+/* chips */
+.chips{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.chips .lead{font-size:11.5px;color:var(--ink-faint);margin-right:1px}
+.chip-btn{
+  font-family:var(--mono);font-size:12px;background:var(--surface);border:1px solid var(--line);
+  border-radius:999px;padding:4px 11px;cursor:pointer;color:var(--ink-soft);
+}
+.chip-btn:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+.chip-btn.var{color:var(--good);border-color:transparent;background:var(--good-soft)}
+
+/* ---------- reference rail ---------- */
+.ref{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  display:flex;flex-direction:column;max-height:calc(100vh - 130px);position:sticky;top:76px;
+}
+@media (max-width:960px){ .ref{position:static;max-height:none} }
+.ref-head{padding:12px 13px 10px;border-bottom:1px solid var(--line)}
+.ref-head h2{margin:0 0 9px;font-size:13px;font-weight:650;display:flex;align-items:center;gap:7px}
+.ref-head .count{font-weight:400;color:var(--ink-faint);font-size:11.5px}
+#refSearch{
+  width:100%;border:1px solid var(--line);border-radius:9px;padding:7px 10px;
+  font-size:13px;font-family:var(--sans);background:var(--bg);color:var(--ink);outline:0;
+}
+#refSearch:focus{border-color:var(--accent)}
+.ref-groups{overflow-y:auto;padding:6px 6px 12px}
+.ref-groups::-webkit-scrollbar{width:10px}
+.ref-groups::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:99px;border:3px solid var(--surface)}
+.grp-label{
+  font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);
+  padding:11px 8px 5px;font-weight:600;
+}
+.fn{border-radius:8px;padding:2px 3px}
+.fn:hover{background:var(--bg)}
+.fn-head{display:flex;gap:8px;align-items:baseline;cursor:pointer;padding:4px 5px;border-radius:7px}
+.fn-name{
+  font-family:var(--mono);font-size:12px;color:var(--accent);background:none;border:0;
+  padding:0;cursor:pointer;text-align:left;white-space:nowrap;
+}
+.fn-name:hover,.fn-name:focus-visible{text-decoration:underline;outline:none}
+.fn-sig{
+  font-family:var(--mono);font-size:11px;color:var(--ink-faint);flex:1 1 auto;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.fn .doc{
+  display:none;font-size:12px;color:var(--ink-soft);white-space:pre-wrap;
+  margin:2px 6px 7px;padding-left:9px;border-left:2px solid var(--line);
+  max-height:230px;overflow:auto;
+}
+.fn.open .doc{display:block}
+.mini{
+  font-size:9.5px;border-radius:5px;padding:1px 5px;margin-left:6px;vertical-align:1px;
+  background:var(--surface-2);color:var(--ink-faint);
+}
+.mini.iter{background:var(--warn-soft);color:var(--warn)}
+.empty-note{padding:16px 10px;color:var(--ink-faint);font-size:13px;text-align:center}
+
+/* ---------- footer ---------- */
+footer{
+  border-top:1px solid var(--line);padding:16px clamp(14px,3vw,32px) 26px;color:var(--ink-faint);
+  font-size:12px;max-width:1400px;margin:0 auto;width:100%;
+}
+footer p{margin:0 0 5px}
+footer code{font-family:var(--mono);font-size:11.5px}
+footer a{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">n</span>
+    <div>
+      <h1>TI-Nspire Statistics</h1>
+      <p>Type what you would type on the handheld &mdash; computed locally, in Python.</p>
+    </div>
+  </div>
+  <span class="spacer"></span>
+  <span class="status" id="engineStatus">Starting the Python engine&hellip;</span>
+  <a class="ghost" id="repoLink" href="#" target="_blank" rel="noopener">Repository</a>
+</header>
+
+<main class="layout">
+  <section class="calc">
+    <div class="screen" id="screen">
+      <div class="empty" id="emptyState">
+        <h2>Nothing computed yet.</h2>
+        <p>The syntax is the calculator's own, not Python's:</p>
+        <ul>
+          <li>a list is <code>{1,2,3}</code> &mdash; braces, and no spaces needed</li>
+          <li>an optional argument you skip stays an empty field: <code>tInterval v,sx,n,,0.95</code></li>
+          <li>every calculation parks its answer in <code>stat.</code> &mdash; read it back with <code>stat.Q1X</code>, or in the next line with <code>stat.v * 2</code></li>
+          <li>name a list with <code>A = {3,1,4}</code>, then use <code>A</code> anywhere an argument goes</li>
+        </ul>
+        <div class="factrow" id="factRow"></div>
+      </div>
+    </div>
+
+    <form class="prompt" id="promptForm" autocomplete="off">
+      <span class="caret">&#9656;</span>
+      <input id="cmd" type="text" spellcheck="false" autocapitalize="off" autocorrect="off"
+             placeholder="OneVar {1,2,4,8,16}" aria-label="TI-Nspire command">
+      <button class="btn primary" id="runBtn" type="submit" disabled>Run</button>
+      <button class="btn" id="resetBtn" type="button">Reset</button>
+    </form>
+    <div class="chips">
+      <span class="lead">Try:</span>
+      <span id="exampleChips"></span>
+      <span class="hint" style="margin-left:auto">
+        <kbd>Enter</kbd> run &middot; <kbd>&uarr;</kbd><kbd>&darr;</kbd> history
+      </span>
+    </div>
+  </section>
+
+  <aside class="ref">
+    <div class="ref-head">
+      <h2>Function reference <span class="count" id="refCount"></span></h2>
+      <input id="refSearch" type="search" placeholder="Search names, e.g. LinReg, tInterval&hellip;" aria-label="Search functions">
+    </div>
+    <div class="ref-groups" id="refGroups"><div class="empty-note">Loading the catalogue&hellip;</div></div>
+  </aside>
+</main>
+
+<footer>
+  <p id="footNote">
+    Function names, argument order and the <code>stat.</code> result names are copied from the
+    TI&#8209;Nspire Reference Guide. Everything runs in your browser &mdash; nothing is uploaded.
+    The first visit downloads the Python runtime once (about 11&nbsp;MB); your browser caches it
+    from then on, and no package installation is ever needed.
+  </p>
+  <p>
+    <code>Type "help" in the command box for a quick syntax card.</code>
+  </p>
+</footer>
+
+<script src="core_bundle.js"></script>
+<script src="la-bridge.js"></script>
+<script>
+"use strict";
+/* ==========================================================================
+   UI layer.  The Python side is reached only through LA.dispatch({op, ...}).
+   ========================================================================== */
+(function () {
+  const REPO = "https://github.com/Franky100-pig/Digital-Nspire-for-Stats";
+  const EXAMPLES = [
+    "OneVar {1,2,4,8,16}",
+    "LinRegMx {1,2,3,4,5},{5,8,11,14,17}",
+    "tInterval {3,4,5,6,7},,0.95",
+    "normCdf -1,1,0,1",
+    "binomPdf 10,.3,4",
+    "countif {1,2,3,9},?<3",
+    "\u03c722way {{10,20},{30,40}}",
+    "ANOVA {1,2,3},{4,5,6},{7,8,9}"
+  ];
+  const FACTS = [];
+  const HELP = [
+    "How to type these commands:",
+    "",
+    "  {1,2,3}                 a list          (not [1,2,3])",
+    "  OneVar v[,Freq]         an argument you skip is an empty field",
+    "  tInterval v,sx,n,,0.95  -> Freq omitted, CLevel given",
+    "  A = {3,1,4,1,5}         name a value, then pass A anywhere",
+    "  OneVar A                use it",
+    "  stat.v  stat.Q1X        read the last result back",
+    "  stat.RegEqn(6)          evaluate a fitted equation",
+    "  countif A,?<3           the ? is the element placeholder",
+    "  countif A,2\u2264?\u22644       chained criteria",
+    "  Reset                   forget variables and results"
+  ].join("\n");
+
+  const el = (id) => document.getElementById(id);
+  const screen = el("screen"), cmd = el("cmd"), runBtn = el("runBtn");
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  let history = [], hIndex = 0, busy = false;
+  const variables = new Set();
+
+  /* ---------- rendering ---------- */
+  function block(o) {
+    const tag = document.createElement("div");
+    tag.innerHTML = o.html;
+    return tag.firstElementChild;
+  }
+
+  function varsTable(vars, carry) {
+    const head =
+      '<div class="vars-head"><span class="title">stat.results</span>' +
+      (carry ? '<span class="badge carry">carried over &mdash; this command did not change stat</span>' : "") +
+      '<button class="copy" type="button">copy</button></div>';
+    const rows = vars.map((v) =>
+      '<tr><td class="vname">stat.' + esc(v.name) + '</td>' +
+      '<td class="vval is-' + esc(v.kind) + '">' + esc(v.text) +
+      (v.length !== null && v.length !== undefined
+        ? '<span class="mini">' + v.length + "</span>" : "") +
+      "</td></tr>").join("");
+    return '<div class="vars">' + head + '<table class="vars-t">' + rows + "</table></div>";
+  }
+
+  function addEntry(text, r) {
+    const empty = el("emptyState");
+    if (empty) empty.remove();
+    let node;
+
+    if (!r.ok) {
+      const e = r.error || {};
+      const sig = e.signature
+        ? '<p class="sig">Expected: <code>' + esc(e.signature) + "</code></p>" : "";
+      const sug = e.suggestInput
+        ? '<button class="suggest" type="button" data-input="' + esc(e.suggestInput) + '">' +
+          "Run <code>" + esc(e.suggest) + "</code> instead</button>" : "";
+      node = block({
+        html: '<article class="entry is-error">' +
+          '<div class="cmdline"><span class="caret">&#9656;</span><code>' + esc(text) + "</code></div>" +
+          '<div class="err"><div class="err-head"><span class="chip">' + esc(e.kind || "Error") + "</span>" +
+          (e.ti ? '<span class="chip ti">TI message</span>' : "") + "</div>" +
+          "<p>" + esc(e.message || "") + "</p>" + sig + sug + "</div></article>"
+      });
+    } else {
+      const answer = r.assign ? r.label : r.summary;
+      const ansHTML = answer
+        ? '<div class="answer' + (r.assign ? " is-eq" : "") + '">' + esc(answer) + "</div>" : "";
+      const docHTML = r.doc
+        ? '<details class="docs"><summary>' + (r.assign ? "notes" : "signature &amp; notes") +
+          "</summary><pre>" + esc(r.doc) + "</pre></details>"
+        : "";
+      const varsHTML = (r.vars && r.vars.length) ? varsTable(r.vars, r.carry) : "";
+      node = block({
+        html: '<article class="entry">' +
+          '<div class="cmdline"><span class="caret">&#9656;</span><code>' + esc(text) + "</code></div>" +
+          ansHTML + varsHTML + docHTML + "</article>"
+      });
+    }
+    screen.appendChild(node);
+    screen.scrollTop = screen.scrollHeight;
+    return node;
+  }
+
+  function addNote(body) {
+    const node = block({
+      html: '<article class="entry"><pre class="note">' + esc(body) + "</pre></article>"
+    });
+    screen.appendChild(node);
+    screen.scrollTop = screen.scrollHeight;
+  }
+
+  function copyText(text, button) {
+    const done = () => {
+      const was = button.textContent;
+      button.textContent = "copied";
+      setTimeout(() => { button.textContent = was; }, 1400);
+    };
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
+    } else {
+      fallbackCopy(text, done);
+    }
+  }
+  function fallbackCopy(text, done) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); done(); } catch (e) { /* leave it to the user */ }
+    document.body.removeChild(ta);
+  }
+
+  function syncVariables() {
+    const host = el("exampleChips");
+    const chips = EXAMPLES.map((c) =>
+      '<button class="chip-btn" type="button" data-input="' + esc(c) + '">' + esc(c) + "</button>");
+    variables.forEach((name) => {
+      chips.push('<button class="chip-btn var" type="button" data-input="' + esc(name) +
+                 '">' + esc(name) + " (saved)</button>");
+    });
+    host.innerHTML = chips.join("");
+  }
+
+  /* ---------- running ---------- */
+  async function run(text) {
+    text = (text || "").trim();
+    if (!text || busy) return;
+    if (text.toLowerCase() === "help") {
+      addNote(HELP);
+      history.push(text); hIndex = history.length;
+      return;
+    }
+    if (!window.LA.ready) {
+      addEntry(text, { ok: false, error: { kind: "NotReady",
+        message: "The Python engine is still loading. Give it a moment and press Enter again." } });
+      return;
+    }
+    busy = true; runBtn.disabled = true;
+    let r;
+    try {
+      r = window.LA.dispatch({ op: "run", input: text });
+    } catch (err) {
+      r = { ok: false, error: { kind: "BridgeError", message: String(err) } };
+    }
+    addEntry(text, r);
+    if (r.ok && r.assign) {
+      variables.add(r.assignName || text.split("=")[0].trim());
+      syncVariables();
+    }
+    history.push(text); hIndex = history.length;
+    busy = false; runBtn.disabled = false;
+  }
+
+  screen.addEventListener("click", (ev) => {
+    const sug = ev.target.closest(".suggest");
+    if (sug) { cmd.value = sug.dataset.input; run(cmd.value); return; }
+    const cp = ev.target.closest(".copy");
+    if (cp) {
+      const rows = cp.closest(".vars").querySelectorAll("table tr");
+      const lines = Array.from(rows).map((tr) =>
+        "stat." + tr.children[0].textContent + " = " + tr.children[1].childNodes[0].textContent);
+      copyText(lines.join("\n"), cp);
+    }
+  });
+  el("exampleChips").addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-input]");
+    if (b) { cmd.value = b.dataset.input; cmd.focus(); }
+  });
+
+  el("promptForm").addEventListener("submit", (ev) => { ev.preventDefault(); const v = cmd.value; cmd.value = ""; run(v); });
+  el("resetBtn").addEventListener("click", () => {
+    if (window.LA.ready) window.LA.dispatch({ op: "reset" });
+    variables.clear(); syncVariables();
+    const s = el("screen"); s.innerHTML = "";
+    const e = document.createElement("div");
+    e.className = "empty"; e.id = "emptyState";
+    e.innerHTML = "<h2>Session reset.</h2><p>Variables and <code>stat.results</code> are cleared.</p>" +
+                  '<div class="factrow" id="factRow"></div>';
+    s.appendChild(e);
+    fillFacts();
+    cmd.focus();
+  });
+  cmd.addEventListener("keydown", (ev) => {
+    if (ev.key === "ArrowUp" && history.length) {
+      ev.preventDefault(); hIndex = Math.max(0, hIndex - 1); cmd.value = history[hIndex] || "";
+    } else if (ev.key === "ArrowDown" && history.length) {
+      ev.preventDefault(); hIndex = Math.min(history.length, hIndex + 1);
+      cmd.value = history[hIndex] || "";
+    }
+  });
+
+  /* ---------- reference rail ---------- */
+  function shortSig(sig) {
+    return String(sig || "").split("\n")[0].replace(/`/g, "").split(" -- ")[0].trim().replace(/\.$/, "");
+  }
+
+  function renderRef(functions) {
+    const groups = {};
+    functions.forEach((f) => { (groups[f.groupLabel] = groups[f.groupLabel] || []).push(f); });
+    el("refGroups").innerHTML = Object.keys(groups).sort().map((label) => {
+      const rows = groups[label].map((f) => {
+        const iter = f.fidelity === "iterative"
+          ? '<span class="mini iter" title="Converges iteratively; the last digits can differ between implementations">iterative</span>'
+          : "";
+        return '<div class="fn" data-name="' + esc(f.name) + '">' +
+          '<div class="fn-head"><button class="fn-name" type="button">' + esc(f.name) + "</button>" +
+          '<span class="fn-sig">' + esc(shortSig(f.signature)) + "</span>" + iter + "</div>" +
+          '<div class="doc">' + esc(f.doc || "No notes.") + "</div></div>";
+      }).join("");
+      return '<div class="grp-label">' + esc(label) + "</div>" + rows;
+    }).join("");
+  }
+
+  // The name inserts the call; the rest of the row shows the reference notes.
+  el("refGroups").addEventListener("click", (ev) => {
+    const row = ev.target.closest(".fn");
+    if (!row) return;
+    if (ev.target.closest(".fn-name")) {
+      cmd.value = row.dataset.name + " ";
+      cmd.focus();
+      return;
+    }
+    if (ev.target.closest(".doc")) return; // reading, not toggling
+    row.classList.toggle("open");
+  });
+  el("refSearch").addEventListener("input", (ev) => {
+    const q = ev.target.value.trim().toLowerCase();
+    document.querySelectorAll("#refGroups .fn").forEach((n) => {
+      const hit = !q || n.dataset.name.toLowerCase().includes(q);
+      n.style.display = hit ? "" : "none";
+      if (q && hit) { const d = n.classList; d.remove("open"); }
+    });
+    document.querySelectorAll("#refGroups .grp-label").forEach((label) => {
+      let any = false, s = label.nextElementSibling;
+      while (s && s.classList.contains("fn")) {
+        if (s.style.display !== "none") any = true;
+        s = s.nextElementSibling;
+      }
+      label.style.display = any ? "" : "none";
+    });
+  });
+
+  /* ---------- boot ---------- */
+  function fillFacts() {
+    const row = el("factRow");
+    if (row) row.innerHTML = FACTS.map((f) => '<span class="fact">' + f + "</span>").join("");
+  }
+  el("repoLink").href = REPO;
+  syncVariables();
+  fillFacts();
+
+  window.LA.readyPromise.then(() => {
+    runBtn.disabled = false;
+    cmd.focus();
+    const cat = window.LA.dispatch({ op: "catalog" });
+    const fns = cat.functions || [];
+    renderRef(fns);
+    el("refCount").textContent = fns.length + " names";
+    const iterative = fns.filter((f) => f.fidelity === "iterative").length;
+    const groups = new Set(fns.map((f) => f.groupLabel)).size;
+    FACTS.length = 0;
+    FACTS.push("<b>" + fns.length + "</b> catalog names, spelled as the guide spells them");
+    FACTS.push("<b>" + groups + "</b> menus covered");
+    FACTS.push("<b>" + iterative + "</b> iterative fits");
+    FACTS.push("first load ~11 MB, then cached");
+    fillFacts();
+    window.__laCatalog = fns;
+  });
+})();
+</script>
+</body>
+</html>
