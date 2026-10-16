@@ -36,6 +36,42 @@ macOS, not just by reading the classifier.
 
 ---
 
+## Use it in the browser
+
+`web/` builds a single-page version of the same package: you type calculator
+syntax into a command line and the *real* `tinspire_stats` modules answer, inside
+Pyodide, with nothing to install and nothing uploaded.
+
+```console
+$ python web/build_preview.py          # writes web/dist/  (index.html + two .js files)
+$ python web/build_preview.py --serve  # ...then serve it on http://127.0.0.1:8000
+```
+
+`web/dist/index.html` is a plain static page — any web server or GitHub Pages
+branch will do. It has to be served over HTTP (not opened as a file), because
+the browser fetches the Python runtime from a CDN; the first visit pulls about
+11 MB and caches it.
+
+What the page adds on top of the library, because a command line is not the same
+thing as an import:
+
+- `{1,2,3}` is a list, and an argument you skip stays an empty field —
+  `tInterval {3,4,5,6,7},,0.95` means "Freq omitted, CLevel 0.95".
+- `A = {3,1,4}` names a value for the rest of the session; `stat.Q1X * 2` reads
+  the previous result back, exactly as on the handheld.
+- `countif A,?<3` passes TI's `?` placeholder straight through to
+  `make_criteria`.
+- A command that is deliberately *not* a TI-Nspire name gets told so: type
+  `stdev` and the page answers with the catalog spelling, a one-click
+  "run `stDevSamp` instead", and the reason the name is filed where it is.
+- The `stat.results` block is labelled **carried over** when the command you
+  just ran did not write it — so a bare `2+2` is never mistaken for a fresh
+  computation.
+- The reference rail lists all 84 catalog names with their documented call
+  forms, and marks the three iterative fits.
+
+---
+
 ## Why this exists
 
 Porting a calculator's statistics suite is mostly a *naming* problem. The
@@ -352,6 +388,11 @@ tests/              150 tests: name fidelity, quirks, pinned values, doctests
 tools/              checks_vs_scipy.py -- the numerical cross-check
                     check_readme.py -- runs every example in this file
 examples/tour.py    a printable calculator session
+web/                the single-page browser version (see "Use it in the browser")
+  engine.py         command parser: TI argument syntax, session, stat block
+  index.template.html  the page itself (light + dark, no framework)
+  la-bridge.js      Pyodide loader with a three-CDN fallback
+  build_preview.py  bundles the package + page into web/dist/
 ```
 
 ## Running the checks
