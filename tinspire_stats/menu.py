@@ -15,16 +15,23 @@ Statistics is ``6`` on the Calculator page and ``4`` on the Lists & Spreadsheet
 page, which is why the path people remember is not the path the Calculator page
 takes.  Both trees are here, so either habit works.
 
-Only the Statistics branch leads anywhere.  The other categories are real
-menu entries with real numbers -- pressing them is what the handheld would
-do -- but this package is a statistics library, so they resolve to
-``unsupported`` rather than to a function that does not exist.
+The two pages do not only renumber Statistics -- they lay its contents out
+differently, and the Lists & Spreadsheet page's own branches (Actions, Insert,
+Data, Table) hold the grid operations the Calculator page has no equivalent of.
+See the note above ``SHEET_ACTIONS``.
+
+Only statistics leads to a function of the package.  The categories outside it
+are real menu entries with real numbers -- pressing them is what the handheld
+would do -- and resolve to ``unsupported``, or to ``sheet`` where the line is an
+action on the open spreadsheet.
 
 Sources for the item order and the numbering: the TI-Nspire eGuide pages for
 Stat Tests, Confidence Intervals and Distributions (which document the items
-in menu order), the Calculator and Lists & Spreadsheet menu listings in TI's
-own getting-started guides, and the List Math screenshot in TI's statistics
-activity sheet.
+in menu order), the Lists & Spreadsheet eGuide chapter (for the grid branches
+and for where List Math sits on that page), the Lists & Spreadsheet menu table
+in TI's user manual and the "Data > Fill Down" path in TI's own *First Steps
+with TI-Nspire CX*, and the List Math screenshot in TI's statistics activity
+sheet.
 """
 
 from __future__ import annotations
@@ -37,6 +44,16 @@ __all__ = [
     "Resolution",
     "MenuError",
     "APPS",
+    "KEYS",
+    "STAT_RESULTS",
+    "SHEET_PREFIX",
+    "SHEET_ACTIONS",
+    "SHEET_INSERT",
+    "SHEET_DATA",
+    "SHEET_STATISTICS",
+    "SHEET_TABLE",
+    "sheet_op",
+    "is_sheet_op",
     "resolve",
     "menu_paths",
 ]
@@ -65,7 +82,8 @@ class Choice(NamedTuple):
 
     key: str
     label: str
-    kind: str                       # "submenu" | "function" | "unsupported"
+    #: "submenu" | "function" | "sheet" | "unsupported"
+    kind: str
     function: "str | None"
 
 
@@ -73,9 +91,10 @@ class Resolution(NamedTuple):
     """What a menu path lands on.
 
     ``kind`` is ``"menu"`` when more keys are expected (the submenu is open and
-    waiting), ``"function"`` when the path reached something this package can
-    run, and ``"unsupported"`` when it reached a real menu entry that belongs
-    to a category the package does not cover.
+    waiting), ``"function"`` when the path reached a statistics function this
+    package can run, ``"sheet"`` when it reached an action on the open
+    spreadsheet, and ``"unsupported"`` when it reached a real menu entry that
+    belongs to a category the package does not cover.
     """
 
     kind: str
@@ -223,6 +242,133 @@ STATISTICS = (
 )
 
 # --------------------------------------------------------------------------
+# The Lists & Spreadsheet page's own branches.
+#
+# The two pages do not merely number Statistics differently: the *contents*
+# differ, and the Lists & Spreadsheet menu is where that is visible.
+#
+# TI's Lists & Spreadsheet menu lists four entries under Statistics, not the
+# Calculator's seven:
+#
+#     1: Stat Calculations   2: Distributions
+#     3: Confidence Intervals   4: Stat Tests
+#
+# "Stat Results" is absent because it means something else on this page.  The
+# eGuide, describing the statistics wizards, says they "store the results in
+# two columns: one for the result names, and one for the corresponding
+# values" -- so there is no stat.results variable here to display; the answers
+# land in the grid.  List Math and List Operations are on the *Data* menu
+# instead, which is where the work is ("From the Data menu, click
+# List Math > Mean", eGuide, Creating Spreadsheet Data).
+#
+# This is the one claim in this module I cannot fully pin.  The four-item list
+# is from the TI-Nspire user manual's Lists & Spreadsheet menu table, which is
+# an older revision than the eGuide; the eGuide confirms only that Stat Results
+# and List Math are not where the Calculator page puts them, not what the
+# surviving four are in order.  Stat Calculations first is safe -- it is what
+# ``menu 4 1 1`` depends on.
+#
+# The grid operations below are the one place a menu line does not name a
+# statistics function.  They are spelled ``sheet.<method>`` and resolved
+# against the open spreadsheet, so the menu still cannot promise a function
+# that does not exist.
+# --------------------------------------------------------------------------
+
+#: The prefix that marks a menu line as a spreadsheet action rather than a
+#: statistics function.
+SHEET_PREFIX = "sheet."
+
+
+def sheet_op(method: str) -> str:
+    """The menu spelling of a :class:`~tinspire_stats.sheet.Sheet` method."""
+    return SHEET_PREFIX + method
+
+
+def is_sheet_op(name: "str | None") -> bool:
+    return bool(name) and name.startswith(SHEET_PREFIX)
+
+
+#: Actions.  The six lines and their order are the user manual's table; the
+#: Resize and Select submenus are the eGuide's ("From the Actions menu, select
+#: Resize, and then select an option").  Only Move Column, Recalculate and Sort
+#: touch the data -- the rest rearrange or size the display.
+SHEET_ACTIONS = (
+    Item("Move Column", sheet_op("move_column")),
+    Item("Resize", children=(
+        Item("Resize Column Width"),
+        Item("Maximize Column Width"),
+        Item("Minimize Column Width"),
+        Item("Resize Row Height"),
+    )),
+    Item("Select", children=(
+        Item("Select Formula Range"),
+    )),
+    Item("Go To"),
+    Item("Recalculate", sheet_op("recalculate")),
+    Item("Sort", sheet_op("sort_by")),
+)
+
+#: Insert.  The user manual's order is Cell, Row, Column; TI's getting-started
+#: guide for the CX lists the two that matter here as "select either Row or
+#: Column", which does not order them.  None of the three is implemented yet.
+SHEET_INSERT = (
+    Item("Insert Cell"),
+    Item("Insert Row"),
+    Item("Insert Column"),
+)
+
+#: Data.  The first four lines and their order are the user manual's table, and
+#: Fill Down is independently pinned to the third slot by TI's own *First Steps
+#: with TI-Nspire CX*: "choosing the options 3: Data and 3: Fill Down".  Fill
+#: Down is also the one line here the package can run.
+#:
+#: List Math and List Operations are here rather than under Statistics (see the
+#: note above) and follow the four the manual orders.  Data > Random > Integer
+#: is on the map with its real number but resolves to nothing: ``randInt`` is a
+#: Probability function, and this package files it under OFF_MENU on the
+#: Calculator side.
+SHEET_DATA = (
+    Item("Generate Sequence"),
+    Item("Data Capture", children=(
+        Item("Auto"),
+        Item("Ask"),
+        Item("Manual"),
+        Item("Clear Data"),
+        Item("Display On"),
+    )),
+    Item("Fill Down", sheet_op("fill_down")),
+    Item("Quick Graph"),
+    Item("List Math", children=LIST_MATH),
+    Item("List Operations", children=LIST_OPERATIONS),
+    Item("Random", children=(
+        Item("Integer"),
+    )),
+)
+
+#: Statistics, four entries (see the note above).
+SHEET_STATISTICS = (
+    Item("Stat Calculations", children=STAT_CALCULATIONS),
+    Item("Distributions", children=DISTRIBUTIONS),
+    Item("Confidence Intervals", children=CONFIDENCE_INTERVALS),
+    Item("Stat Tests", children=STAT_TESTS),
+)
+
+#: Table.  Five lines in the user manual's order.  The names are the eGuide's,
+#: which is the live documentation: it calls "Select Function" simply Choose,
+#: and drops the word Function from the settings and expression lines.
+#:
+#: None of these is a spreadsheet column operation -- Delete Column here
+#: removes a column of a *function* table -- so none of them is wired to the
+#: sheet, and none should be.
+SHEET_TABLE = (
+    Item("Switch to Table"),
+    Item("Select Function"),
+    Item("Edit Table Settings"),
+    Item("Delete Column"),
+    Item("Edit Expression"),
+)
+
+# --------------------------------------------------------------------------
 # The two application menus.  Everything outside Statistics is a real entry
 # with no function behind it.
 # --------------------------------------------------------------------------
@@ -239,11 +385,11 @@ CALCULATOR_MENU = (
 )
 
 LISTS_SHEET_MENU = (
-    Item("Actions"),
-    Item("Insert"),
-    Item("Data"),
-    Item("Statistics", children=STATISTICS),
-    Item("Table"),
+    Item("Actions", children=SHEET_ACTIONS),
+    Item("Insert", children=SHEET_INSERT),
+    Item("Data", children=SHEET_DATA),
+    Item("Statistics", children=SHEET_STATISTICS),
+    Item("Table", children=SHEET_TABLE),
     Item("Hints"),
 )
 
@@ -285,18 +431,21 @@ def _find(children: Sequence[Item], key: str) -> "tuple[int, Item] | None":
     return None
 
 
+def _kind_of(item: Item) -> str:
+    if item.children is not None:
+        return "submenu"
+    if not item.function:
+        return "unsupported"
+    return "sheet" if is_sheet_op(item.function) else "function"
+
+
 def _choices(children: Sequence[Item]) -> "tuple[Choice, ...]":
     out = []
     for position, item in enumerate(children):
         if position >= len(KEYS):
             break
-        if item.children is not None:
-            kind = "submenu"
-        elif item.function:
-            kind = "function"
-        else:
-            kind = "unsupported"
-        out.append(Choice(KEYS[position], item.label, kind, item.function))
+        out.append(Choice(KEYS[position], item.label, _kind_of(item),
+                          item.function))
     return tuple(out)
 
 
@@ -336,7 +485,7 @@ def resolve(app: "str | None" = "calculator", path: Iterable[str] = ()) -> Resol
             step += 1
             continue
         return Resolution(
-            kind="function" if item.function else "unsupported",
+            kind=_kind_of(item),
             title=trail[-1] if trail else app_label,
             path=keys,
             breadcrumb=tuple([app_label] + trail),

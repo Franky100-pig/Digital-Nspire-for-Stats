@@ -136,17 +136,105 @@ def test_intervals_and_tests_are_the_documented_sets():
 # ==========================================================================
 # 3. outside statistics
 # ==========================================================================
-def test_categories_outside_statistics_say_so_rather_than_pretending():
-    for app, key in (("calculator", "1"), ("calculator", "2"),
-                     ("calculator", "3"), ("calculator", "4"),
-                     ("calculator", "5"), ("calculator", "7"),
-                     ("calculator", "8"), ("listssheet", "1"),
-                     ("listssheet", "2"), ("listssheet", "3"),
-                     ("listssheet", "5"), ("listssheet", "6")):
-        r = menu.resolve(app, key)
-        assert r.kind == "unsupported", (app, key)
+def test_calculator_categories_outside_statistics_say_so_rather_than_pretending():
+    for key in ("1", "2", "3", "4", "5", "7", "8"):
+        r = menu.resolve("calculator", key)
+        assert r.kind == "unsupported", key
         assert r.function is None
         assert r.label  # it still names the line the user pressed
+
+
+def test_the_lists_and_spreadsheet_grid_menus_are_real_submenus():
+    """Actions, Insert, Data and Table open; Hints does not.
+
+    These four are the grid's own menus, so on this page they are submenus
+    rather than dead ends -- that is what makes ``menu 3 3`` Fill Down.
+    """
+    for key, title in (("1", "Actions"), ("2", "Insert"), ("3", "Data"),
+                       ("5", "Table")):
+        r = menu.resolve("listssheet", key)
+        assert r.kind == "menu", key
+        assert r.title == title
+        assert r.choices
+
+    hints = menu.resolve("listssheet", "6")
+    assert hints.kind == "unsupported"
+    assert hints.label == "Hints"
+
+
+def test_fill_down_is_the_third_line_of_the_data_menu():
+    """TI's own path: "choosing the options 3: Data and 3: Fill Down"."""
+    r = menu.resolve("listssheet", "33")
+    assert r.kind == "sheet"
+    assert r.function == "sheet.fill_down"
+    assert r.label == "Fill Down"
+
+
+def test_the_grid_actions_that_touch_data_are_the_ones_wired():
+    """Move Column, Recalculate and Sort; the rest rearrange the display."""
+    actions = menu.resolve("listssheet", "1").choices
+    by_key = {c.key: c for c in actions}
+    assert [c.label for c in actions] == [
+        "Move Column", "Resize", "Select", "Go To", "Recalculate", "Sort",
+    ]
+    for key in ("1", "5", "6"):
+        assert by_key[key].kind == "sheet", key
+    for key in ("2", "3", "4"):
+        assert by_key[key].kind in ("submenu", "unsupported"), key
+
+    # Resize and Select open, and every line inside them is a display action
+    for key in ("2", "3"):
+        assert by_key[key].kind == "submenu"
+        assert all(c.kind == "unsupported" for c in
+                   menu.resolve("listssheet", "1" + key).choices)
+
+
+def test_the_lists_sheet_statistics_menu_is_four_lines_not_seven():
+    """The page stores its results in the grid, so it has no Stat Results.
+
+    TI's Lists & Spreadsheet menu table lists Stat Calculations, Distributions,
+    Confidence Intervals and Stat Tests, and the eGuide says the wizards write
+    "the result names" and "the corresponding values" into two columns.  List
+    Math moved to the Data menu on this page, which the eGuide shows directly.
+    """
+    r = menu.resolve("listssheet", "4")
+    assert [c.label for c in r.choices] == [
+        "Stat Calculations", "Distributions", "Confidence Intervals",
+        "Stat Tests",
+    ]
+    assert "Stat Results" not in [c.label for c in r.choices]
+    # ... and it still reaches the same first function
+    assert menu.resolve("listssheet", "411").function == "OneVar"
+
+    data = menu.resolve("listssheet", "3").choices
+    assert "List Math" in [c.label for c in data]
+
+
+def test_the_table_menu_is_function_tables_not_spreadsheet_columns():
+    """Delete Column here removes a function-table column, not a data column,
+    so nothing on this menu may be wired to the sheet."""
+    r = menu.resolve("listssheet", "5")
+    assert [c.label for c in r.choices] == [
+        "Switch to Table", "Select Function", "Edit Table Settings",
+        "Delete Column", "Edit Expression",
+    ]
+    assert all(c.kind == "unsupported" for c in r.choices)
+
+
+def test_a_sheet_action_names_a_real_method_on_the_sheet():
+    """The menu cannot promise a grid action the grid does not have."""
+    seen = 0
+    for app in menu.APPS:
+        for path, _crumb, item in menu.menu_paths(app):
+            if not menu.is_sheet_op(item.function):
+                continue
+            seen += 1
+            method = item.function[len(menu.SHEET_PREFIX):]
+            assert callable(getattr(ts.Sheet, method, None)), (
+                f"{' '.join(path)} promises {item.function}, which Sheet "
+                f"has no method for"
+            )
+    assert seen, "no menu line is wired to the sheet at all"
 
 
 def test_list_operations_keeps_its_unsupported_lines():
@@ -177,6 +265,8 @@ def test_every_menu_function_exists_and_is_callable():
         for path, _crumb, item in menu.menu_paths(app):
             if not item.function or item.function == menu.STAT_RESULTS:
                 continue
+            if menu.is_sheet_op(item.function):
+                continue            # a grid action, checked separately
             target = getattr(ts, item.function, None)
             assert target is not None, (
                 f"{' '.join(path)} promises {item.function}, which the package "
@@ -190,7 +280,8 @@ def test_every_ti_function_has_a_front_door_or_is_filed_off_menu():
     reachable = set()
     for app in menu.APPS:
         for _path, _crumb, item in menu.menu_paths(app):
-            if item.function and item.function != menu.STAT_RESULTS:
+            if (item.function and item.function != menu.STAT_RESULTS
+                    and not menu.is_sheet_op(item.function)):
                 reachable.add(item.function)
     filed = set()
     for names in list(MENU.values()) + list(OFF_MENU.values()):

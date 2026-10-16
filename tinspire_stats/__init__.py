@@ -225,6 +225,26 @@ from .inference import (
 )
 
 # --------------------------------------------------------------------------
+# The Lists & Spreadsheet page
+# --------------------------------------------------------------------------
+# Imported here so the menu's ``sheet.`` actions can be checked against real
+# methods, and so a caller can open a grid from the package root.  ``sheet``
+# itself imports nothing from this package at module level -- it looks the
+# statistics functions up lazily, when a cell formula first needs one -- so
+# this does not close an import cycle.
+from .sheet import (
+    MAX_COLUMNS,
+    MAX_ROWS,
+    Column,
+    Sheet,
+    SheetError,
+    index_of,
+    letter_of,
+    valid_column_letter,
+    valid_list_name,
+)
+
+# --------------------------------------------------------------------------
 # catalogue helpers
 # --------------------------------------------------------------------------
 from .catalog import (
@@ -314,6 +334,9 @@ __all__ = [
     "zTest", "tTest", "zTest_2Samp", "tTest_2Samp", "FTest_2Samp",
     "zTest_1Prop", "zTest_2Prop",
     "chi2GOF", "χ2GOF", "chi22way", "χ22way", "ANOVA", "ANOVA2way",
+    # the Lists & Spreadsheet page
+    "Sheet", "Column", "SheetError", "MAX_COLUMNS", "MAX_ROWS",
+    "letter_of", "index_of", "valid_column_letter", "valid_list_name",
     # catalogue
     "MENU", "OFF_MENU",
     "ascii_name", "ti_spelling", "catalog", "lookup", "menu_tree",
