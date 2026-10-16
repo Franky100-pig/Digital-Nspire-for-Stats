@@ -82,6 +82,15 @@ thing as an import:
 - The `stat.results` block is labelled **carried over** when the command you
   just ran did not write it — so a bare `2+2` is never mistaken for a fresh
   computation.
+- The `menu` key opens the handheld's own menus, numbering and all: press
+  `menu`, then `4 1 1`, and the entry line holds `OneVar ` — that is the path
+  on a Lists & Spreadsheet page. The same function is `6 1 1` on a Calculator
+  page, and both menus are modelled, so either habit works. Distributions runs
+  to `I` (item 10 is `A`), the touchpad walks a menu line by line, `esc` closes
+  it, `◂` backs up a level, and a key the menu does not offer is refused the
+  way the handheld refuses it — the menu stays put. Categories outside
+  statistics are real entries with their real numbers and say **not supported
+  yet** when pressed.
 - The keypad is laid out as the CX II has it: the touchpad and the esc / ctrl /
   tab / del cluster, `doc` `menu` `var` and the scratchpad key, the alphabet
   keys in their alphabetical grid with the Greek letter printed above each one
@@ -139,6 +148,15 @@ README: 10 blocks, 34 examples, 0 failed
 The full signature list is in `pretty_catalog()` (or `python -c
 "import tinspire_stats as t; print(t.pretty_catalog())"`).
 `examples/tour.py` walks through all of it as a printable session.
+
+The group names above are the handheld's menu labels, not invented headings:
+`tinspire_stats.menu` holds both application menus the `menu` key walks — the
+Calculator page's `1 Actions … 8 Finance` and the Lists & Spreadsheet page's
+`1 Actions … 6 Hints`, which is why the remembered path `4 1 1` is that page's
+and not the Calculator's. `catalog.MENU` is generated from it, so the grouping
+and the menu cannot drift apart, and `catalog.OFF_MENU` files the names with no
+menu entry of their own (`randSamp` and friends live under **Probability**, and
+`FiveNumSummary` is typed, not chosen).
 
 ---
 
@@ -401,9 +419,13 @@ tinspire_stats/
   distributions.py  continuous + discrete distributions, rand*
   inference.py      intervals, hypothesis tests, ANOVA, chi-square
   catalog.py        name registry, ASCII twins, the generated function list
+  menu.py           the handheld's menus and the paths that walk them -- the
+                    two application layouts, the letter numbering, and what
+                    each path lands on
   legacy.py         every name that is *not* TI-Nspire, with its standing and
                     the evidence for it -- the only place such names are defined
-tests/              150 tests: name fidelity, quirks, pinned values, doctests
+tests/              172 tests: name fidelity, the menu tree, quirks, pinned
+                    values, doctests
 tools/              checks_vs_scipy.py -- the numerical cross-check
                     check_readme.py -- runs every example in this file
 examples/tour.py    a printable calculator session
