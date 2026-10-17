@@ -97,6 +97,60 @@ thing as an import:
   (hold **ctrl** and the next letter types as that Greek letter, which is the
   handheld's own modifier behaviour), then the symbol row and the numeric pad.
   A physical keyboard works everywhere instead.
+- **There are two pages, and the second one is a spreadsheet.** The chips above
+  the panel switch between *Calculator* and *Lists & Spreadsheet*; the grid is
+  the real thing — name a column and it becomes a list variable the Calculator
+  page can use. See below.
+
+---
+
+## The Lists & Spreadsheet page
+
+The device's second application is a grid, and on the handheld it is the normal
+way to get data into a statistics function: type the column, name the column,
+switch to Calculator, run `OneVar` on the name. That whole path works here.
+
+```console
+A1..A5   11   8   7   12   9.5      typed on the keypad
+A name   mshoe                      tab to the naming band, type the name
+menu 6 1 1                          from the Calculator page: One-Variable Statistics
+OneVar mshoe
+        stat.v = 9.5   stat.Σx = 47.5   stat.sx = 2.061552813   stat.n = 5
+```
+
+The grid draws the four bands the eGuide names — the **column reference
+letter**, the **column name**, the **column formula**, and the **row reference
+number** — with the data under them. `enter` writes into the cell the cursor is
+on, the touchpad and the arrow keys move the cursor, `tab` crosses between the
+data band and the naming band, and the window follows the cursor so four columns
+are on screen at a time.
+
+What it reproduces, and why:
+
+- **`a[]` is the whole column, `a1` is a cell, `'a1` is the variable `a1`.**
+  This is TI's own syntax table, printed in *Getting Started with the TI-Nspire
+  Handheld* under "Preventing name conflicts" and repeated in the CAS edition,
+  the software manual and the Chinese manual. So `D1 = B1/A1` divides two
+  element-wise lists rather than two cells, which is why TI's *First Steps with
+  TI-Nspire CX* prints `D1=27/11, D2=21/8, D3=20/7, D4=2.375` for exactly that
+  formula filled down — and this does the same.
+- **`Fill Down` shifts relative row references and leaves `$`-pinned ones
+  alone.** `=a1*1.05` in `B1`, filled to `B5`, gives `11.55, 8.4, 7.35, 12.6,
+  9.975`; the formula each cell holds is the one you would get by hand.
+- **A void is an underscore inside the list and blank past the end.** eGuide:
+  "Any empty (void) element in a list is displayed as an underscore (`_`)." A
+  void also propagates through a formula rather than being read as zero.
+- **A cell that cannot be computed says so, in the cell.** `Error: …` is printed
+  where the value would be, in red, and the rest of the column still draws — one
+  bad formula must not be able to blank the page.
+- **A name the calculator already uses is refused when you type it.** TI: "You
+  cannot use a preassigned variable or function name, such as `ans` or `min`."
+  A column called `mean` would be unreachable, because the function wins, so the
+  refusal happens at the naming band.
+- **The grid's own menus are real.** `Data ▸ Fill Down` is `menu 3 3` and asks
+  for its arguments in a dialog pre-filled from the cursor; `Actions` carries
+  Move Column, Resize, Select, Go To, Recalculate and Sort, of which Move
+  Column, Recalculate and Sort act on the model.
 
 ---
 
