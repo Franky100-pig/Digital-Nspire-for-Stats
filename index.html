@@ -260,6 +260,89 @@ body.engine-failed .status{color:var(--bad); background:var(--bad-soft); border-
 .empty ul{margin:3px 0 0; padding-left:13px}
 .empty li{margin:1px 0}
 
+/* --- the Lists & Spreadsheet grid ---
+   Laid out the way the device lays it out, which the eGuide names part by part:
+   a column reference letter, a *white* column name cell, a *grey* column
+   formula cell, a row reference number, and the body cells.  "The top two rows
+   and the row numbers remain in place as you scroll" -- so the name band and
+   the formula band are sticky and the body scrolls under them.
+
+   A void element is an underscore and a value too wide for its column is cut
+   off, both of which the grid does by giving every cell the same fixed width
+   and clipping it. */
+.sheetpage{min-height:0}
+.sheetpage[hidden]{display:none}
+/* The ledger is the other page, so hiding it has to mean hidden. */
+.entries[hidden]{display:none}
+/* What the last menu action did, said in the grid's header line. */
+.sh-note{color:var(--lcd-ink)}
+.sh-note.err{color:#d2453a}
+.sheetgrid{
+  display:grid; grid-auto-rows:min-content;
+  font-family:var(--mono); font-size:10px; line-height:15px;
+  color:var(--lcd-ink); background:var(--lcd);
+  width:100%;
+}
+.sh-corner{
+  position:sticky; left:0; top:0; z-index:3;
+  background:var(--lcd-sel); border-right:1px solid var(--lcd-rule);
+  border-bottom:1px solid var(--lcd-rule);
+}
+/* the letter sits above the column's name cell, as on the device */
+.sh-letter{
+  position:sticky; top:0; z-index:2; height:15px;
+  padding:0 4px; background:var(--lcd); border-bottom:1px solid var(--lcd-rule);
+  color:var(--lcd-dim); overflow:hidden;
+}
+.sh-letter b{color:var(--lcd-ink); font-weight:700}
+.sh-name{
+  position:sticky; top:15px; z-index:2; height:15px;
+  padding:0 4px; background:var(--lcd); border-bottom:1px solid var(--lcd-rule);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+/* the grey band: the formula that applies to every cell below it */
+.sh-formula{
+  position:sticky; top:30px; z-index:2; height:15px;
+  padding:0 4px; background:var(--lcd-sel); border-bottom:1px solid var(--lcd-rule);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.sh-rowno{
+  position:sticky; left:0; z-index:1; height:15px;
+  padding:0 4px; text-align:right; color:var(--lcd-dim);
+  background:var(--lcd-sel); border-right:1px solid var(--lcd-rule);
+  border-bottom:1px solid var(--lcd-rule);
+}
+.sh-cell{
+  height:15px; padding:0 4px; border-bottom:1px solid var(--lcd-rule);
+  overflow:hidden; text-overflow:clip; white-space:nowrap;
+}
+.sh-cell.n{text-align:right}
+.sh-cell.err{color:#d2453a}
+.sh-cell.void{color:var(--lcd-dim)}
+/* the cell the cursor is on is drawn inverted, as the device marks it */
+.sh-letter.on, .sh-name.on, .sh-formula.on, .sh-cell.on, .sh-rowno.on{
+  background:var(--lcd-ink); color:var(--lcd);
+}
+.sh-letter.on b{color:var(--lcd)}
+.sh-head{
+  grid-column:1 / -1; padding:1px 5px; font-size:9px; color:var(--lcd-dim);
+  background:var(--lcd-sel); border-bottom:1px solid var(--lcd-rule);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.sh-head b{color:var(--lcd-ink)}
+
+/* the grid's own dialogs -- Fill Down and Sort ask for their arguments, as the
+   device's do, and reuse the error dialog's frame */
+.dlg-fields{padding:3px 5px 0; display:grid; grid-template-columns:auto 1fr; gap:2px 5px; font-size:10px}
+.dlg-fields label{color:var(--lcd-dim); align-self:center}
+.dlg-fields input, .dlg-fields select{
+  font:inherit; font-size:10px; width:100%; min-width:0;
+  background:var(--lcd); color:var(--lcd-ink);
+  border:1px solid var(--lcd-rule); border-radius:2px; padding:1px 3px; outline:0;
+}
+.dlg-fields input:focus, .dlg-fields select:focus{border-color:var(--lcd-ink)}
+.dlg-fields .wide{grid-column:1 / -1}
+
 /* --- the menu the menu key drops down ---
    Drawn inside the 320x240 screen so it scales with it, and drawn over the
    page the way the handheld draws it: the menu covers the page, it does not
@@ -476,10 +559,16 @@ footer a{color:var(--ink-soft)}
               </svg>
             </div>
             <div class="viewport" id="screen">
-              <div class="empty" id="emptyState"></div>
+              <div class="sheetpage" id="sheetPage" hidden>
+                <div class="sheetgrid" id="sheetGrid" role="grid"
+                     aria-label="Lists and Spreadsheet"></div>
+              </div>
+              <div class="entries" id="entries">
+                <div class="empty" id="emptyState"></div>
+              </div>
             </div>
             <form class="entryline" id="promptForm" autocomplete="off">
-              <span class="arrow">&#9656;</span>
+              <span class="arrow" id="entryRef">&#9656;</span>
               <input id="cmd" type="text" spellcheck="false" autocapitalize="off" autocorrect="off"
                      placeholder="OneVar {1,2,4,8,16}" aria-label="TI-Nspire command line">
               <button class="hidden-submit" type="submit" tabindex="-1" aria-hidden="true">Run</button>
@@ -654,6 +743,15 @@ footer a{color:var(--ink-soft)}
 
   const el = (id) => document.getElementById(id);
   const screen = el("screen"), cmd = el("cmd");
+
+  /* The log is its own element inside the screen, and it has to be: the Lists &
+     Spreadsheet grid shares the screen, and clearScreen used to replace the
+     whole viewport -- which would have taken the grid out of the document. */
+  function ledger() { return el("entries") || screen; }
+  function logNode(node) {
+    ledger().appendChild(node);
+    screen.scrollTop = screen.scrollHeight;
+  }
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -782,16 +880,14 @@ footer a{color:var(--ink-soft)}
         '<div class="in"><span class="arrow">&#9656;</span><span>' + esc(text) + "</span></div>" +
         out + table + doc;
     }
-    screen.appendChild(node);
-    screen.scrollTop = screen.scrollHeight;
+    logNode(node);
   }
 
   function addNote(body) {
     const node = document.createElement("article");
     node.className = "ent";
     node.innerHTML = '<pre class="note" style="margin:0">' + esc(body) + "</pre>";
-    screen.appendChild(node);
-    screen.scrollTop = screen.scrollHeight;
+    logNode(node);
   }
 
   /* The menu is the handheld's, so it reaches past statistics into categories
@@ -813,8 +909,7 @@ footer a{color:var(--ink-soft)}
       '<div class="dlg-b">Not supported yet.' +
       (crumb ? '<br><span class="k">' + esc(crumb) + "</span>" : "") + "</div>" +
       '<div class="dlg-f"><button type="button" class="ok">OK</button></div></div>';
-    screen.appendChild(node);
-    screen.scrollTop = screen.scrollHeight;
+    logNode(node);
   }
 
   function engineNotReady() {
@@ -823,7 +918,7 @@ footer a{color:var(--ink-soft)}
   }
 
   function clearScreen(message) {
-    screen.innerHTML = '<div class="empty" id="emptyState">' + message + "</div>";
+    ledger().innerHTML = '<div class="empty" id="emptyState">' + message + "</div>";
   }
 
   function copyText(text, button) {
@@ -910,6 +1005,11 @@ footer a{color:var(--ink-soft)}
   function takeMenuFunction(res) {
     closeMenu();
     if (res.function === statResultsName) { run(statResultsName); return; }
+    // Pasted, not run: on the handheld, picking One-Variable Statistics writes
+    // the call and then asks for the arguments.  On the spreadsheet page this
+    // has to be marked as a command, or enter would store it in a cell.
+    entryIsCommand = true;
+    syncEntry();
     cmd.value = res.function + " ";
     const at = cmd.value.length;
     cmd.setSelectionRange(at, at);
@@ -922,6 +1022,8 @@ footer a{color:var(--ink-soft)}
     if (!r.ok) { denyMenu(r); return; }
     if (r.kind === "menu") { showMenu(r); return; }
     if (r.kind === "function") { takeMenuFunction(r); return; }
+    // A grid action: the device opens its dialog, so this does too.
+    if (r.kind === "sheet") { takeMenuSheet(r); return; }
     closeMenu();
     addUnsupported(r);
   }
@@ -990,22 +1092,389 @@ footer a{color:var(--ink-soft)}
     if (on && on.scrollIntoView) on.scrollIntoView({ block: "nearest" });
   }
 
+  /* ---------- the Lists & Spreadsheet page ----------
+     One grid, drawn the way the eGuide names it: a column reference letter, a
+     white column name cell, a grey column formula cell, a row reference number,
+     and the body cells.  The column name is the point of the page -- it becomes
+     a list variable the Calculator page can use -- so naming a column here and
+     then typing `OneVar mshoe` there is the whole test of this thing.
+
+     The grid panes rather than nesting a scrollbar: the device shows about four
+     columns and you walk off the edge of them, so the window follows the
+     cursor.  Vertically the whole screen scrolls, headers sticking. */
+  const SHEET_WINDOW = 4;             // columns on screen at once
+  const SHEET_ZONES = ["name", "formula", "data"];
+  let sheetSnap = null;
+  let sheetWin = 0;                   // first visible column
+  let sheetCursor = { col: 0, row: 1, zone: "data" };
+  let sheetDialog = null;             // {res, spec} while a grid dialog is up
+  //: The last thing a menu action did, shown in the grid's own header line.
+  //: The ledger of past commands is hidden on this page, so a note appended
+  //: there would never be seen.
+  let sheetNote = "";
+  let sheetNoteBad = false;           // the note is a refusal, so colour it
+  //: Whether the entry line holds a *command* rather than the contents of a
+  //: cell.  On the spreadsheet page enter writes into the cell the cursor is on,
+  //: so a call pasted out of the menu has to say that it is a call -- otherwise
+  //: choosing One-Variable Statistics and pressing enter would try to store the
+  //: text "OneVar " in a cell.  The entry line shows which it is, the same way
+  //: the device shows the cell reference only while you are editing a cell.
+  let entryIsCommand = false;
+
+  function askSheet(payload) {
+    try {
+      return window.LA.dispatch(Object.assign({ op: "sheet" }, payload));
+    } catch (err) {
+      return { ok: false, error: { kind: "BridgeError", message: String(err) } };
+    }
+  }
+
+  /* Adopt a snapshot the engine sent back, keeping the cursor where the user
+     left it.  The engine answers every edit with the whole grid, so this is the
+     one place the screen learns what the grid now is. */
+  function takeSheet(r) {
+    if (r && r.sheet) {
+      sheetSnap = r.sheet;
+      sheetCursor.col = Math.min(sheetCursor.col, sheetSnap.columns.length - 1);
+      sheetCursor.row = Math.min(sheetCursor.row, sheetSnap.rows);
+      drawSheet();
+      syncVariables();
+      return true;
+    }
+    return false;
+  }
+
+  function loadSheet() {
+    if (!window.LA.ready) return;
+    takeSheet(askSheet({ action: "snapshot" }));
+  }
+
+  const colLetter = (i) => String.fromCharCode(65 + i);
+  function sheetColumn() {
+    return (sheetSnap && sheetSnap.columns[sheetCursor.col]) || null;
+  }
+
+  /* What the entry line holds for the cell the cursor is on.  The device shows
+     the cell's *contents*, not what they work out to -- so a formula cell shows
+     its formula, which is the only way to edit one. */
+  function sheetEntry() {
+    const c = sheetColumn();
+    if (!c) return "";
+    if (sheetCursor.zone === "name") return c.name;
+    if (sheetCursor.zone === "formula") return c.formula;
+    return (c.raw && c.raw[String(sheetCursor.row)]) || "";
+  }
+
+  function sheetRef() {
+    const c = sheetColumn();
+    if (!c) return "";
+    if (sheetCursor.zone === "name") return c.letter + " name";
+    if (sheetCursor.zone === "formula") return c.letter + " formula";
+    return c.letter + sheetCursor.row;
+  }
+
+  /* Write the entry line into the cell the cursor is on, through the engine. */
+  function sheetCommit() {
+    const text = cmd.value;
+    cmd.value = "";
+    const c = sheetColumn();
+    if (!c) return;
+    const body = sheetCursor.zone === "name"
+      ? { action: "name", column: c.letter, text: text }
+      : sheetCursor.zone === "formula"
+        ? { action: "formula", column: c.letter, text: text }
+        : { action: "cell", column: c.letter, row: sheetCursor.row, text: text };
+    const r = askSheet(body);
+    if (!r.ok) {
+      takeSheet(r);
+      sheetRefuse(r);
+      syncEntry();
+      return;
+    }
+    sheetNote = "";                   // a fresh edit supersedes the last note
+    sheetNoteBad = false;
+    takeSheet(r);
+    syncEntry();
+  }
+
+  /* A refused edit is the device's own message, said in the grid's own header
+     line.  The ledger of past commands is hidden on this page, so a dialog
+     appended to it would never be seen. */
+  function sheetRefuse(r) {
+    const err = r.error || {};
+    sheetSay(err.message || "That edit could not be made.", true);
+  }
+
+  function sheetSay(text, bad) {
+    sheetNote = text;
+    sheetNoteBad = !!bad;
+    drawSheet();
+  }
+
+  function syncEntry() {
+    const ref = el("entryRef");
+    if (ref) ref.textContent = sheetOnPage() && !entryIsCommand ? sheetRef() : "\u25b8";
+  }
+
+  function sheetOnPage() { return currentApp === "listssheet" && !!sheetSnap; }
+
+  function drawSheet() {
+    const host = el("sheetGrid");
+    if (!host || !sheetSnap) return;
+    const cols = sheetSnap.columns;
+    const total = cols.length;
+
+    // Keep the cursor's column inside the window, the way walking off the edge
+    // of the screen does on the device.
+    sheetWin = Math.max(0, Math.min(sheetWin, Math.max(0, total - SHEET_WINDOW)));
+    if (sheetCursor.col < sheetWin) sheetWin = sheetCursor.col;
+    if (sheetCursor.col >= sheetWin + SHEET_WINDOW) sheetWin = sheetCursor.col - SHEET_WINDOW + 1;
+    const shown = cols.slice(sheetWin, sheetWin + SHEET_WINDOW);
+
+    // The columns share whatever width the screen has, the way four columns do
+    // on the device.  A fixed 74px each overflowed the LCD and clipped the last
+    // column; the window shows four at a time either way.
+    host.style.gridTemplateColumns = "24px repeat(" + shown.length + ", minmax(0, 1fr))";
+    const out = ['<div class="sh-head">' +
+      "<b>" + esc(sheetSnap.rows) + " rows</b> \u00b7 " +
+      esc(Object.keys(sheetSnap.bindings || {}).length) + " list variable(s) \u00b7 " +
+      "columns " + esc(shown[0] ? shown[0].letter : "A") + "\u2013" +
+      esc(shown.length ? shown[shown.length - 1].letter : "A") +
+      (sheetNote ? ' \u00b7 <b class="sh-note' + (sheetNoteBad ? " err" : "") +
+        '">' + esc(sheetNote) + "</b>" : "") +
+      "</div>"];
+    // Every cell carries the coordinates it stands for, so a click is read
+    // rather than recomputed from its position in the DOM.  The header row
+    // spans the grid and would throw any index arithmetic off by one.
+    // Every cell is placed by row and column rather than left to auto-flow.
+    // The three header bands and the data rows are different lengths, so
+    // flowing them let each band start where the last one ended, which put the
+    // names in the row-number track and shifted every value one column right.
+    const pos = (row, col) => ' style="grid-row:' + row + ";grid-column:" + col + '"';
+    const at = (col) => ' data-zone="name" data-col="' + (sheetWin + col) + '"';
+    out.push('<div class="sh-corner"' + pos(2, 1) + "></div>");
+    shown.forEach((c, i) => {
+      const on = sheetCursor.zone === "name" && sheetWin + i === sheetCursor.col;
+      out.push('<div class="sh-letter' + (on ? " on" : "") + '"' + at(i) + pos(2, i + 2) + "><b>" +
+        esc(c.letter) + "</b></div>");
+    });
+    shown.forEach((c, i) => {
+      const on = sheetCursor.zone === "name" && sheetWin + i === sheetCursor.col;
+      out.push('<div class="sh-name' + (on ? " on" : "") + '"' + at(i) + pos(3, i + 2) +
+        ' title="' + esc(c.name) + '">' + esc(c.name) + "</div>");
+    });
+    shown.forEach((c, i) => {
+      const on = sheetCursor.zone === "formula" && sheetWin + i === sheetCursor.col;
+      out.push('<div class="sh-formula' + (on ? " on" : "") +
+        ' data-zone="formula" data-col="' + (sheetWin + i) + '"' + pos(4, i + 2) +
+        ' title="' + esc(c.formula) + '">' + esc(c.formula) + "</div>");
+    });
+    for (let row = 1; row <= sheetSnap.rows; row++) {
+      const onRow = sheetCursor.zone === "data" && sheetCursor.row === row;
+      out.push('<div class="sh-rowno' + (onRow ? " on" : "") +
+        ' data-zone="data" data-row="' + row + '"' + pos(row + 4, 1) + ">" + row + "</div>");
+      shown.forEach((c, i) => {
+        const on = onRow && sheetWin + i === sheetCursor.col;
+        const text = (c.cells && c.cells[String(row)]) || "";
+        let cls = "sh-cell";
+        // A void element is an underscore and a number is right-aligned; an
+        // error takes the whole cell and says so, in the device's red.
+        if (text === "_") cls += " void";
+        else if (text.startsWith("Error:")) cls += " err";
+        else if (text !== "") cls += " n";
+        out.push('<div class="' + cls + (on ? " on" : "") +
+          '" data-zone="data" data-col="' + (sheetWin + i) + '" data-row="' + row + '"' +
+          pos(row + 4, i + 2) + ' title="' + esc(text) + '">' + esc(text) + "</div>");
+      });
+    }
+    host.innerHTML = out.join("");
+  }
+
+  /* Move the cursor.  In the naming zone the up and down arrows swap between
+     the two bands; in the data zone they walk the rows.  Tab crosses between
+     the zones, which is what the eGuide says it does. */
+  function sheetMove(dCol, dRow) {
+    if (!sheetSnap) return;
+    if (dCol) {
+      sheetCursor.col = Math.max(0, Math.min(sheetSnap.columns.length - 1,
+                                              sheetCursor.col + dCol));
+    }
+    if (!dRow) { drawSheet(); syncEntry(); return; }
+    if (sheetCursor.zone === "data") {
+      sheetCursor.row = Math.max(1, Math.min(sheetSnap.rows, sheetCursor.row + dRow));
+    } else {
+      const at = SHEET_ZONES.indexOf(sheetCursor.zone);
+      sheetCursor.zone = SHEET_ZONES[Math.max(0, Math.min(1, at + dRow))];
+    }
+    drawSheet();
+    syncEntry();
+    entryIsCommand = false;
+    cmd.value = sheetEntry();
+    cmd.focus();
+  }
+
+  function sheetTab() {
+    sheetCursor.zone = sheetCursor.zone === "data" ? "name" : "data";
+    drawSheet();
+    syncEntry();
+    entryIsCommand = false;
+    cmd.value = sheetEntry();
+    cmd.focus();
+  }
+
+  el("sheetGrid").addEventListener("click", (ev) => {
+    const node = ev.target.closest("[data-zone]");
+    if (!node || !sheetSnap) return;
+    sheetCursor.zone = node.dataset.zone;
+    if (node.dataset.col != null) sheetCursor.col = Number(node.dataset.col);
+    if (node.dataset.row != null) sheetCursor.row = Number(node.dataset.row);
+    drawSheet();
+    syncEntry();
+    entryIsCommand = false;
+    cmd.value = sheetEntry();
+    cmd.focus();
+  });
+
+  /* ---------- the grid actions the menu reaches ----------
+     Two of the four take arguments, and the device asks for them in a dialog,
+     so these do too -- filled in from where the cursor is, because that is
+     what "the selected column" means on the handheld. */
+  const SHEET_DIALOGS = {
+    "sheet.fill_down": {
+      title: "Fill Down",
+      fields: [
+        { name: "column", label: "Column", kind: "text", def: () => colLetter(sheetCursor.col) },
+        { name: "from", label: "From row", kind: "text", def: () => String(sheetCursor.row) },
+        { name: "to", label: "To row", kind: "text", def: () => String(sheetLastRow()) },
+      ],
+      args: (v) => [v.column, Number(v.from), Number(v.to)],
+    },
+    "sheet.sort_by": {
+      title: "Sort",
+      fields: [
+        { name: "column", label: "Sort by", kind: "text", def: () => colLetter(sheetCursor.col) },
+        { name: "order", label: "Order", kind: "select", options: ["Ascending", "Descending"],
+          def: () => "Ascending" },
+      ],
+      args: (v) => [v.column],
+      kwargs: (v) => ({ ascending: v.order !== "Descending" }),
+    },
+    "sheet.move_column": {
+      title: "Move Column",
+      fields: [
+        { name: "from", label: "Move", kind: "text", def: () => colLetter(sheetCursor.col) },
+        { name: "to", label: "To", kind: "text", def: () => colLetter(sheetCursor.col) },
+      ],
+      args: (v) => [v.from, v.to],
+    },
+  };
+
+  /* The last row of the cursor's column that holds anything -- the range Fill
+     Down would cover if you arrowed to the end of the data. */
+  function sheetLastRow() {
+    const c = sheetColumn();
+    if (!c || !c.cells) return sheetCursor.row;
+    const rows = Object.keys(c.cells).map(Number).filter((n) => c.cells[String(n)] !== "");
+    return rows.length ? Math.max.apply(null, rows) : sheetCursor.row;
+  }
+
+  function takeMenuSheet(res) {
+    const spec = SHEET_DIALOGS[res.function];
+    if (!spec) { runSheetAction(res.function, [], {}); return; }
+    sheetDialog = { res: res, spec: spec };
+    drawSheetDialog();
+  }
+
+  function drawSheetDialog() {
+    const pop = el("menuPop"), d = sheetDialog;
+    if (!d) return;
+    pop.hidden = false;
+    pop.setAttribute("aria-label", d.spec.title + " dialog");
+    pop.innerHTML =
+      '<div class="menu-head">' +
+      esc((d.res.breadcrumb || []).join(" \u203a ")) + "</div>" +
+      '<div class="dlg-fields">' +
+      d.spec.fields.map((f) => {
+        const id = "shf-" + f.name;
+        const control = f.kind === "select"
+          ? '<select id="' + id + '">' + f.options.map((o) =>
+              '<option>' + esc(o) + "</option>").join("") + "</select>"
+          : '<input id="' + id + '" type="text" value="' + esc(f.def()) + '">';
+        return '<label for="' + id + '">' + esc(f.label) + "</label>" + control;
+      }).join("") + "</div>" +
+      '<div class="menu-foot">\u21b5 runs it \u2014 esc cancels</div>';
+    const first = pop.querySelector(".dlg-fields input, .dlg-fields select");
+    if (first) { first.focus(); if (first.select) first.select(); }
+  }
+
+  function sheetDialogValues() {
+    const v = {};
+    sheetDialog.spec.fields.forEach((f) => {
+      const node = el("shf-" + f.name);
+      v[f.name] = node ? node.value.trim() : f.def();
+    });
+    return v;
+  }
+
+  function sheetDialogRun() {
+    const d = sheetDialog;
+    if (!d) return;
+    const v = sheetDialogValues();
+    let args, kwargs;
+    try {
+      args = d.spec.args(v);
+      kwargs = d.spec.kwargs ? d.spec.kwargs(v) : {};
+    } catch (err) {
+      return;                      // a half-typed field: stay in the dialog
+    }
+    sheetDialog = null;
+    runSheetAction(d.res.function, args, kwargs);
+  }
+
+  function runSheetAction(name, args, kwargs) {
+    closeMenu();
+    if (!window.LA.ready) { engineNotReady(); return; }
+    const r = askSheet({ action: "action", name: name, args: args, kwargs: kwargs });
+    takeSheet(r);
+    const words = name.replace(/^sheet\./, "").replace(/_/g, " ");
+    const label = words.charAt(0).toUpperCase() + words.slice(1);
+    if (r.ok) sheetSay(label + " \u2014 done");
+    else sheetRefuse(r);
+    syncEntry();
+  }
+
   /* ---------- actions bound to the keys that are not characters ---------- */
   const ACTIONS = {
     enter: () => {
+      // A grid dialog holds the screen while it is up, the way a modal one does
+      // on the device: enter runs it rather than running the entry line.
+      if (sheetDialog) { sheetDialogRun(); return; }
       if (menuState) { menuSelect(); return; }
-      const v = cmd.value; cmd.value = ""; run(v);
+      // On the spreadsheet page the entry line writes into the cell the cursor
+      // is on -- the grid has no prompt of its own, exactly as on the handheld.
+      // Unless the line is holding a call the menu pasted there.
+      if (sheetOnPage() && !entryIsCommand) { sheetCommit(); return; }
+      const v = cmd.value; cmd.value = ""; entryIsCommand = false; syncEntry();
+      run(v);
     },
     del: () => { if (!menuState) backspace(); },
     // Esc backs out of whatever you are in.  With a menu open that is the
     // menu; otherwise it clears the entry line -- wiping the results would
     // not be "backing out".
     esc: () => {
+      // A grid dialog is cancelled by esc, and cancelling it leaves the page
+      // where it was -- it does not also back out of the menu behind it.
+      if (sheetDialog) { sheetDialog = null; closeMenu(); syncEntry(); cmd.focus(); return; }
       if (menuBack()) { cmd.focus(); return; }
       if (cmd.value) { cmd.value = ""; }
       cmd.focus();
     },
-    tab: () => { const s = el("refSearch"); s.focus(); s.select(); },
+    tab: () => {
+      // On the spreadsheet page Tab crosses between the data zone and the
+      // naming zone, which is what the eGuide says it is for.
+      if (sheetOnPage() && !menuState) { sheetTab(); return; }
+      const s = el("refSearch"); s.focus(); s.select();
+    },
     doc: () => addNote(HELP),
     menu: () => {
       if (menuState) { closeMenu(); cmd.focus(); return; }
@@ -1035,6 +1504,16 @@ footer a{color:var(--ink-soft)}
         return;
       }
       if (dir === "ok") return act("enter");
+      // On the spreadsheet page the touchpad moves the cell cursor.  On the
+      // calculator page the left and right keys move the text caret and up and
+      // down walk the command history, which is what they have always done.
+      if (sheetOnPage()) {
+        if (dir === "left") return sheetMove(-1, 0);
+        if (dir === "right") return sheetMove(1, 0);
+        if (dir === "up") return sheetMove(0, -1);
+        if (dir === "down") return sheetMove(0, 1);
+        return;
+      }
       if (dir === "left") return moveCaret(-1);
       if (dir === "right") return moveCaret(1);
       if (dir === "up" || dir === "down") {
@@ -1164,11 +1643,20 @@ footer a{color:var(--ink-soft)}
   });
 
   el("resetBtn").addEventListener("click", () => {
-    if (window.LA.ready) window.LA.dispatch({ op: "reset" });
+    if (window.LA.ready) {
+      // Reset closes the spreadsheet too, so take the grid it hands back.
+      takeSheet(window.LA.dispatch({ op: "reset" }));
+    }
     closeMenu();
+    sheetDialog = null;
+    entryIsCommand = false;
+    sheetWin = 0;
+    sheetCursor = { col: 0, row: 1, zone: "data" };
+    if (sheetSnap) drawSheet();
     variables.clear(); syncVariables();
     history = []; hIndex = 0;
-    clearScreen("<b>Reset.</b> Variables, history and <code>stat.results</code> are cleared.");
+    clearScreen("<b>Reset.</b> Variables, history, <code>stat.results</code> and the spreadsheet are cleared.");
+    syncEntry();
     cmd.focus();
   });
 
@@ -1179,13 +1667,34 @@ footer a{color:var(--ink-soft)}
   function setApp(key) {
     currentApp = key;
     closeMenu();
+    entryIsCommand = false;
+    const onSheet = key === "listssheet";
+    const page = el("sheetPage");
+    if (page) page.hidden = !onSheet;
+    // One page at a time, as on the device.  The ledger of past commands is
+    // taller than the screen, so leaving it above the grid pushed the grid
+    // itself off the bottom -- the page looked blank.
+    const log = ledger();
+    if (log) log.hidden = onSheet;
+    if (screen) screen.scrollTop = 0;
+    if (onSheet) {
+      loadSheet();
+    } else {
+      sheetSnap = null;                // the grid is not this page
+    }
     const hint = el("pageHint");
     if (hint) {
       const found = appsInfo.find((a) => a.key === key);
-      hint.textContent = found && found.statisticsKey
+      const stats = found && found.statisticsKey
         ? "menu " + found.statisticsKey + " 1 1 \u2192 One-Variable Statistics"
         : "";
+      hint.textContent = onSheet
+        ? "enter writes into the cursor's cell \u00b7 tab: names and formulas \u00b7 " + stats
+        : stats;
     }
+    cmd.value = "";
+    cmd.placeholder = onSheet ? "a value, a name, or =a1*1.05" : "OneVar {1,2,4,8,16}";
+    syncEntry();
     buildAppButtons();
   }
 
@@ -1210,11 +1719,42 @@ footer a{color:var(--ink-soft)}
       chips.push('<button class="chip-btn var" type="button" data-input="' + esc(name) + '">' +
                  esc(name) + " (saved)</button>");
     });
+    // The grid's named columns are list variables too -- that is the whole
+    // reason to name one, so they belong in the same list as the rest.
+    const binds = (sheetSnap && sheetSnap.bindings) || {};
+    Object.keys(binds).forEach((name) => {
+      if (variables.has(name)) return;
+      const n = (binds[name] || []).length;
+      chips.push('<button class="chip-btn var" type="button" data-input="' + esc(name) +
+                 '" title="column ' + esc(name) + ", " + n + ' values">' +
+                 esc(name) + " (" + n + ")</button>");
+    });
     el("exampleChips").innerHTML = chips.join("");
   }
   el("exampleChips").addEventListener("click", (ev) => {
     const b = ev.target.closest("[data-input]");
-    if (b) { cmd.value = b.dataset.input; cmd.focus(); }
+    if (!b) return;
+    const text = b.dataset.input;
+    // A saved variable -- and a named column is one -- is *inserted* into what
+    // you are already typing, which is what the `var` key does on the handheld.
+    // Replacing the line would throw away the `OneVar ` a menu choice had just
+    // put there, leaving the bare name to be echoed instead of computed.
+    // A worked example is a whole command, so that does replace the line.
+    if (b.classList.contains("var") && cmd.value !== "") {
+      const at = cmd.selectionStart != null && cmd.selectionStart < cmd.value.length
+        ? cmd.selectionStart : cmd.value.length;
+      const to = cmd.selectionEnd != null && cmd.selectionEnd > at ? cmd.selectionEnd : at;
+      cmd.value = cmd.value.slice(0, at) + text + cmd.value.slice(to);
+      const caret = at + text.length;
+      cmd.focus();
+      cmd.setSelectionRange(caret, caret);
+      syncEntry();
+      return;
+    }
+    cmd.value = text;
+    entryIsCommand = false;
+    syncEntry();
+    cmd.focus();
   });
 
   /* ---------- reference rail ---------- */
