@@ -11,11 +11,16 @@
 /* ==========================================================================
    Two palettes at once, on purpose.
 
-   The page follows the system theme.  The calculator does not: it is a
-   photograph of an object, and an object does not change colour when you
-   turn the lights off.  So the chassis tones are fixed while everything
-   around them -- including the lit screen, which really would be dimmer at
-   night -- follows prefers-color-scheme.
+   The calculator is a photograph of an object, and an object does not change
+   colour when you turn the lights off.  So the chassis tones are fixed while
+   everything around them -- including the lit screen, which really would be
+   dimmer at night -- follows the theme.
+
+   The page starts out following prefers-color-scheme and the theme button
+   overrides it, by hand, and the choice is remembered in localStorage.  Both
+   palettes are written out here rather than derived, because there are only
+   two of them and a light theme that is a darkened dark theme always looks
+   like a mistake.
    ========================================================================== */
 :root{
   --bg:#ffffff;
@@ -66,8 +71,12 @@
   --sw:calc(var(--dw) * .876);
   --du:calc(var(--dw) / 100);       /* one percent of the device width */
 }
-@media (prefers-color-scheme:dark){
-  :root{
+/* The dark palette.  One block, and the script in <head> decides which
+   attribute -- "light" or "dark" -- actually lands on <html>, resolving the
+   system preference before the page paints so nothing flashes.  The block below
+   is the one it needs, not a media query, so a remembered choice wins over the
+   system without either of them being able to override the other. */
+:root[data-theme="dark"]{
     --bg:#0e1621; --surface:#151f2e; --surface-2:#1b2739; --line:#243247;
     --line-strong:#33445e; --ink:#e8eef7; --ink-soft:#a9b8cc; --ink-faint:#7b8ba1;
     --accent:#6d9bff; --accent-soft:#1a2740; --good:#4fd1a0; --good-soft:#122e26;
@@ -77,7 +86,6 @@
     --lcd-dim:#8fa1b0;
     --lcd-rule:#26313b;
     --lcd-sel:#1c242d;
-  }
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -520,6 +528,20 @@ footer p{margin:0 0 5px}
 footer code{font-family:var(--mono); font-size:11.5px}
 footer a{color:var(--ink-soft)}
 </style>
+<script>
+/* The theme, resolved before the page paints -- so a remembered light theme is
+   light on the first frame, not after a flash of dark.
+
+   What is stored is the *preference*: auto, light or dark.  Auto means follow
+   the system, and that is the thing this resolves. */
+(function () {
+  var pref = null;
+  try { pref = window.localStorage.getItem("nspire-theme"); } catch (e) {}
+  var resolved = (pref === "light" || pref === "dark") ? pref
+    : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.setAttribute("data-theme", resolved);
+})();
+</script>
 </head>
 <body>
 
@@ -532,6 +554,7 @@ footer a{color:var(--ink-soft)}
   </div>
   <span class="spacer"></span>
   <span class="status" id="engineStatus">Starting the Python engine&hellip;</span>
+  <button class="btn" id="themeBtn" type="button" title="Theme: follow the system, light, or dark">Theme</button>
   <button class="btn" id="resetBtn" type="button" title="Clear variables, history and stat.results">Reset</button>
   <a class="btn" id="repoLink" href="#" target="_blank" rel="noopener">Repository</a>
 </header>
@@ -1805,7 +1828,57 @@ footer a{color:var(--ink-soft)}
     });
   });
 
+  /* ---------- the theme button ----------
+     Three states, cycling: follow the system, then light, then dark.  What is
+     stored is the preference and not the resolved colour, because "auto" has
+     to keep following when the system changes its mind an hour from now. */
+  const THEME_ORDER = ["auto", "light", "dark"];
+  const THEME_LABEL = {
+    auto: "following the system",
+    light: "light",
+    dark: "dark",
+  };
+
+  function themePreference() {
+    let pref = null;
+    try { pref = window.localStorage.getItem("nspire-theme"); } catch (err) {}
+    return THEME_ORDER.indexOf(pref) >= 0 ? pref : "auto";
+  }
+
+  function themeResolved(pref) {
+    if (pref === "light" || pref === "dark") return pref;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+
+  function paintThemeButton() {
+    const btn = el("themeBtn");
+    if (!btn) return;
+    const pref = themePreference();
+    btn.textContent = pref === "auto" ? "Auto" : pref === "light" ? "Light" : "Dark";
+    btn.setAttribute("aria-pressed", String(pref !== "auto"));
+    btn.title = "Theme: " + THEME_LABEL[pref] + " \u2014 click for the next one";
+    btn.dataset.next = THEME_ORDER[(THEME_ORDER.indexOf(pref) + 1) % THEME_ORDER.length];
+  }
+
+  function applyTheme(pref) {
+    document.documentElement.setAttribute("data-theme", themeResolved(pref));
+    paintThemeButton();
+  }
+
+  el("themeBtn").addEventListener("click", () => {
+    const next = el("themeBtn").dataset.next || "light";
+    try { window.localStorage.setItem("nspire-theme", next); } catch (err) {}
+    applyTheme(next);
+  });
+
+  // While the preference is "auto", the system turning its lights on or off
+  // turns ours with it.
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (themePreference() === "auto") applyTheme("auto");
+  });
+
   /* ---------- boot ---------- */
+  paintThemeButton();
   el("repoLink").href = REPO;
   buildPad();
   setApp("listssheet");
