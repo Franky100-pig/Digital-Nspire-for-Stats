@@ -704,6 +704,11 @@ class Sheet:
                     "name": self.columns[letter].name,
                     "formula": self.columns[letter].formula,
                     "cells": self._screen_column(self.columns[letter]),
+                    #: What was typed, as opposed to what it works out to.  The
+                    #: entry line shows the cell's contents, not its value, so
+                    #: the page needs both.
+                    "raw": {str(row): text
+                            for row, text in sorted(self.columns[letter].cells.items())},
                 }
                 for letter in self.columns
             ],

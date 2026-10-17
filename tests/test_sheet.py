@@ -415,6 +415,21 @@ def test_the_snapshot_lists_every_column_and_the_bindings(s):
     assert snap["bindings"] == {"footlength": [27.5]}
 
 
+def test_the_snapshot_carries_what_was_typed_as_well_as_what_it_works_out_to(s):
+    """The entry line shows the cell's contents, not its value.
+
+    A formula cell has to show its formula or it could never be edited, so the
+    snapshot carries both: ``cells`` (what it works out to, for the grid) and
+    ``raw`` (what was typed, for the entry line).
+    """
+    s.set_cell("A", 1, "27.5")
+    s.set_cell("A", 2, "=a1*2")
+    first = s.snapshot()["columns"][0]
+    assert first["cells"]["2"] == "55"
+    assert first["raw"]["2"] == "=a1*2"
+    assert first["raw"]["1"] == "27.5"
+
+
 def test_the_snapshot_shows_whole_numbers_without_a_decimal_tail(s):
     s.set_cell("A", 1, "4")
     s.set_cell("A", 2, "4.25")
