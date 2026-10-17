@@ -97,6 +97,10 @@ thing as an import:
   (hold **ctrl** and the next letter types as that Greek letter, which is the
   handheld's own modifier behaviour), then the symbol row and the numeric pad.
   A physical keyboard works everywhere instead.
+- **The theme button cycles three states** — follow the system, light, dark —
+  and the choice is remembered, so a light page stays light on the next visit
+  even on a machine set to dark. The chassis does not change colour in either
+  theme: it is a photograph of an object.
 - **There are two pages, and the second one is a spreadsheet.** The chips above
   the panel switch between *Calculator* and *Lists & Spreadsheet*; the grid is
   the real thing — name a column and it becomes a list variable the Calculator
