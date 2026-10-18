@@ -618,6 +618,15 @@ footer a{color:var(--ink-soft)}
           </div>
         </div>
 
+        <!-- The keypad's own order, top to bottom: navigation, then numeric,
+             then alphabetic.  TI's Technology Instruction Guide describes it in
+             exactly those three sections -- "The TI-Nspire keypad consists of
+             three sections: (1) Navigation keys (2) Numeric keys (3) Alphabetic
+             keys" -- and TI University spells out where the bottom is: "The
+             center of the keypad has numerical keys and operation keys ... The
+             bottom section of the keypad has alphabetical keys."  So the number
+             block sits above the letters, not the other way round as a phone
+             or a TI-84 would have it. -->
         <div class="grid g4" id="funcRow"></div>
         <div class="grid g6" id="numGrid"></div>
         <div class="grid g10" id="symGrid"></div>
