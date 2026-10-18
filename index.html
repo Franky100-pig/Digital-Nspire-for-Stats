@@ -618,10 +618,19 @@ footer a{color:var(--ink-soft)}
           </div>
         </div>
 
+        <!-- The keypad's own order, top to bottom: navigation, then numeric,
+             then alphabetic.  TI's Technology Instruction Guide describes it in
+             exactly those three sections -- "The TI-Nspire keypad consists of
+             three sections: (1) Navigation keys (2) Numeric keys (3) Alphabetic
+             keys" -- and TI University spells out where the bottom is: "The
+             center of the keypad has numerical keys and operation keys ... The
+             bottom section of the keypad has alphabetical keys."  So the number
+             block sits above the letters, not the other way round as a phone
+             or a TI-84 would have it. -->
         <div class="grid g4" id="funcRow"></div>
-        <div class="grid g7" id="alphaGrid"></div>
-        <div class="grid g10" id="symGrid"></div>
         <div class="grid g6" id="numGrid"></div>
+        <div class="grid g10" id="symGrid"></div>
+        <div class="grid g7" id="alphaGrid"></div>
       </div>
     </div>
 
@@ -1598,14 +1607,21 @@ footer a{color:var(--ink-soft)}
     if (k) k.classList.remove("latched");
   }
 
+  function latchCtrl() {
+    greekNext = !greekNext;
+    // Show the latch: a modifier that changes what the next key means has to
+    // say so, or the Greek letter arrives as a surprise.
+    const k = document.querySelector('[data-k="ctrl"]');
+    if (k) k.classList.toggle("latched", greekNext);
+  }
+
   el("pad").addEventListener("pointerdown", (ev) => {
+    // Clicking a keypad key must not move focus off the entry line, or the
+    // physical keyboard goes dead the moment the mouse is used -- the handheld
+    // has one keyboard, so the web one keeps the entry line focused.
+    ev.preventDefault();
     const ctrl = ev.target.closest('[data-k="ctrl"]');
-    if (ctrl) {
-      greekNext = !greekNext;
-      // Show the latch: a modifier that changes what the next key means has to
-      // say so, or the Greek letter arrives as a surprise.
-      ctrl.classList.toggle("latched", greekNext);
-    }
+    if (ctrl) latchCtrl();
     const c = ev.target.closest(".key");
     if (c && !c.classList.contains("latched")) {
       c.classList.add("down");
@@ -1656,7 +1672,18 @@ footer a{color:var(--ink-soft)}
       hIndex = Math.min(history.length, hIndex + 1); cmd.value = history[hIndex] || "";
     } else if (ev.key === "Escape") {
       ev.preventDefault(); act("esc");
-    } else if (greekNext && ev.key.length === 1) {
+    } else if (greekNext && ev.key.length === 1
+               && (ev.ctrlKey || ev.metaKey || ev.altKey)) {
+      // A browser chord spends the latch like any other key -- it just does
+      // not turn the letter Greek, or ctrl+v would paste phi.
+      disarmCtrl();
+    } else if (ev.key === "Control" && !ev.repeat) {
+      // The physical ctrl arms the same one-key latch the on-screen key does:
+      // press it, release it, then the next bare letter is Greek -- exactly
+      // the handheld's press-and-release modifier, not a held one.
+      latchCtrl();
+    } else if (greekNext && ev.key.length === 1
+               && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
       // The modifier works from the physical keyboard too, or the key would be
       // half a key: armed for the mouse and inert for the fingers.
       const letter = GREEK[ev.key.toLowerCase()];
