@@ -101,6 +101,12 @@ thing as an import:
   and the choice is remembered, so a light page stays light on the next visit
   even on a machine set to dark. The chassis does not change colour in either
   theme: it is a photograph of an object.
+- **The handheld boots to its home screen, and so does this.** The screen you
+  land on is the application picker: *Calculate* and *Lists & Spreadsheet* are
+  live, and the rest of the handheld's home is there as decoration that says
+  **not supported yet**. Nothing opens until you pick — no default page.
+  The `Home` chip beside the page chips is the on/home key's stand-in, and it
+  takes you back whenever you want.
 - **There are two pages, and the second one is a spreadsheet.** The chips above
   the panel switch between *Calculator* and *Lists & Spreadsheet*; the grid is
   the real thing — name a column and it becomes a list variable the Calculator
