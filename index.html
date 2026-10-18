@@ -282,6 +282,28 @@ body.engine-failed .status{color:var(--bad); background:var(--bad-soft); border-
 .sheetpage[hidden]{display:none}
 /* The ledger is the other page, so hiding it has to mean hidden. */
 .entries[hidden]{display:none}
+/* The home screen has no entry line -- and this page's own display:flex
+   would beat the hidden attribute's default without this. */
+.entryline[hidden]{display:none}
+/* The home screen: the handheld boots here and picks an application from
+   tiles, so the web one does too -- it must not land on a page the visitor
+   did not ask for.  The two applications this replica carries are live; the
+   rest of the handheld's home is here as decoration that says no. */
+.home-grid{
+  display:grid; grid-template-columns:repeat(3,1fr); gap:10px;
+  padding:16px 12px; width:100%;
+  color:var(--lcd-ink); background:var(--lcd); font-family:var(--mono);
+}
+.home-tile{
+  display:flex; flex-direction:column; align-items:center; gap:7px;
+  padding:12px 4px 9px; border:1px solid var(--lcd-rule); border-radius:6px;
+  background:var(--lcd-sel); color:var(--lcd-ink); cursor:pointer; font:inherit;
+}
+.home-tile:hover{border-color:var(--lcd-ink)}
+.home-tile .ico{font-size:19px; line-height:1}
+.home-tile .lbl{font-size:9px; line-height:1.3; text-align:center}
+.home-tile.dead{opacity:.38; cursor:not-allowed}
+.home-tile.dead:hover{border-color:var(--lcd-rule)}
 /* What the last menu action did, said in the grid's header line. */
 .sh-note{color:var(--lcd-ink)}
 .sh-note.err{color:#d2453a}
@@ -582,6 +604,10 @@ footer a{color:var(--ink-soft)}
               </svg>
             </div>
             <div class="viewport" id="screen">
+              <div class="sheetpage" id="homePage" hidden>
+                <div class="home-grid" id="homeGrid"
+                     aria-label="Home screen: pick an application"></div>
+              </div>
               <div class="sheetpage" id="sheetPage" hidden>
                 <div class="sheetgrid" id="sheetGrid" role="grid"
                      aria-label="Lists and Spreadsheet"></div>
@@ -800,7 +826,7 @@ footer a{color:var(--ink-soft)}
   let menuState = null;     // {app, path:[...], res:{...}} while a menu is open
   let menuSel = 0;          // the highlighted line
   let menuFootTimer = 0;    // puts the footer line back after a refused key
-  let currentApp = "listssheet";
+  let currentApp = "home";
   let appsInfo = [], statResultsName = "stat.results";
 
   /* ---------- keypad construction ---------- */
@@ -1510,6 +1536,9 @@ footer a{color:var(--ink-soft)}
     doc: () => addNote(HELP),
     menu: () => {
       if (menuState) { closeMenu(); cmd.focus(); return; }
+      // The home screen has no application menu yet -- the error it would
+      // produce lands in a ledger the visitor cannot see from here.
+      if (currentApp === "home") { flashHomeHint(); return; }
       openMenu(currentApp, []);
     },
     var: () => { if (!menuState) insert("stat."); },
@@ -1719,13 +1748,19 @@ footer a{color:var(--ink-soft)}
     closeMenu();
     entryIsCommand = false;
     const onSheet = key === "listssheet";
+    const onHome = key === "home";
     const page = el("sheetPage");
     if (page) page.hidden = !onSheet;
+    const home = el("homePage");
+    if (home) home.hidden = !onHome;
     // One page at a time, as on the device.  The ledger of past commands is
     // taller than the screen, so leaving it above the grid pushed the grid
     // itself off the bottom -- the page looked blank.
     const log = ledger();
-    if (log) log.hidden = onSheet;
+    if (log) log.hidden = (onSheet || onHome);
+    // The home screen has no entry line, the way the handheld's does not.
+    const form = el("promptForm");
+    if (form) form.hidden = onHome;
     if (screen) screen.scrollTop = 0;
     if (onSheet) {
       loadSheet();
@@ -1734,16 +1769,21 @@ footer a{color:var(--ink-soft)}
     }
     const hint = el("pageHint");
     if (hint) {
-      const found = appsInfo.find((a) => a.key === key);
-      const stats = found && found.statisticsKey
-        ? "menu " + found.statisticsKey + " 1 1 \u2192 One-Variable Statistics"
-        : "";
-      hint.textContent = onSheet
-        ? "enter writes into the cursor's cell \u00b7 tab: names and formulas \u00b7 " + stats
-        : stats;
+      if (onHome) {
+        hint.textContent = "pick an application";
+      } else {
+        const found = appsInfo.find((a) => a.key === key);
+        const stats = found && found.statisticsKey
+          ? "menu " + found.statisticsKey + " 1 1 \u2192 One-Variable Statistics"
+          : "";
+        hint.textContent = onSheet
+          ? "enter writes into the cursor's cell \u00b7 tab: names and formulas \u00b7 " + stats
+          : stats;
+      }
     }
     cmd.value = "";
-    cmd.placeholder = onSheet ? "a value, a name, or =a1*1.05" : "OneVar {1,2,4,8,16}";
+    cmd.placeholder = onSheet ? "a value, a name, or =a1*1.05"
+                    : onHome ? "" : "OneVar {1,2,4,8,16}";
     syncEntry();
     buildAppButtons();
   }
@@ -1751,16 +1791,61 @@ footer a{color:var(--ink-soft)}
   function buildAppButtons() {
     const host = el("appButtons");
     if (!host) return;
-    host.innerHTML = appsInfo.map((a) =>
+    // The on/home key of the handheld, in the only row this page has for it:
+    // home is where you came from and where the key takes you back.
+    const chips = ['<button class="chip-btn page-btn" type="button" data-app="home"' +
+      (currentApp === "home" ? ' aria-pressed="true"' : ' aria-pressed="false"') +
+      ">Home</button>"];
+    appsInfo.forEach((a) => chips.push(
       '<button class="chip-btn page-btn" type="button" data-app="' + esc(a.key) + '"' +
       (a.key === currentApp ? ' aria-pressed="true"' : ' aria-pressed="false"') + ">" +
-      esc(a.label) + "</button>").join("");
+      esc(a.label) + "</button>"));
+    host.innerHTML = chips.join("");
   }
 
   el("appButtons").addEventListener("click", (ev) => {
     const b = ev.target.closest("[data-app]");
     if (b) setApp(b.dataset.app);
   });
+
+  /* ---------- the home screen ----------
+     The handheld boots here: a grid of applications, and the visitor picks
+     one.  The two this replica carries are live; the rest are the handheld's
+     own home furniture, present and saying no. */
+  const HOME_APPS = [
+    { app: "calculator",  ico: "\u2211", label: "Calculate",            live: true  },
+    { app: "graphs",      ico: "\u223f", label: "Graphs",               live: false },
+    { app: "geometry",    ico: "\u25b3", label: "Geometry",             live: false },
+    { app: "listssheet",  ico: "\u25a6", label: "Lists & Spreadsheet",  live: true  },
+    { app: "datastats",   ico: "\u25a4", label: "Data & Statistics",    live: false },
+    { app: "notes",       ico: "\u270e", label: "Notes",                live: false },
+  ];
+  function buildHome() {
+    const host = el("homeGrid");
+    if (!host) return;
+    host.innerHTML = HOME_APPS.map((a) =>
+      '<button class="home-tile' + (a.live ? "" : " dead") + '" type="button"' +
+      (a.live
+        ? ' data-app="' + a.app + '"'
+        : ' disabled title="not supported yet"') +
+      '><span class="ico">' + a.ico + '</span>' +
+      '<span class="lbl">' + esc(a.label) + "</span></button>").join("");
+  }
+  buildHome();
+  el("homeGrid").addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-app]");
+    if (b) setApp(b.dataset.app);
+  });
+  let homeHintTimer = 0;
+  function flashHomeHint() {
+    const hint = el("pageHint");
+    if (!hint) return;
+    hint.textContent = "pick an application first";
+    clearTimeout(homeHintTimer);
+    homeHintTimer = setTimeout(() => {
+      if (currentApp === "home" && hint) hint.textContent = "pick an application";
+    }, 1600);
+  }
 
   function syncVariables() {
     const chips = EXAMPLES.map((c) =>
@@ -1908,12 +1993,13 @@ footer a{color:var(--ink-soft)}
   paintThemeButton();
   el("repoLink").href = REPO;
   buildPad();
-  setApp("listssheet");
+  setApp("home");
   syncVariables();
   clearScreen(
-    "<b>Ready.</b> Type on the keypad, or use your own keyboard.<br>" +
-    "Press <code>menu</code>, then <code>4 1 1</code>: the menu is the page's<br>" +
-    "own, and this page is a Lists&nbsp;&amp;&nbsp;Spreadsheet page.<br>" +
+    "<b>Ready.</b> The handheld boots to its home screen, so does this:<br>" +
+    "pick <b>Calculate</b> or <b>Lists &amp; Spreadsheet</b> above.<br>" +
+    "Press <code>menu</code> inside an application, then <code>4 1 1</code>:<br>" +
+    "the menu is the page's own.<br>" +
     "A list is <code>{1,2,3}</code>; an argument you skip stays empty:<br>" +
     "<code>tInterval v,sx,n,,0.95</code>.<br>" +
     "The <code>doc</code> key shows the syntax card."
