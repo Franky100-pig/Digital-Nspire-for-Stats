@@ -36,6 +36,22 @@ macOS, not just by reading the classifier.
 
 ---
 
+## Companion notes
+
+The calculator answers *what*; the notes explain *why*.
+[Stats-CheatSheet](https://franky100-pig.github.io/Stats-CheatSheet/) is the
+AP Statistics lecture-note half of this pair: exact formulas, variable
+definitions, the Random / 10% / Normal conditions, and the traps the exam sets.
+Each of its topic pages ends with a **Try it on the TI-Nspire** box whose
+commands come from this repository's catalogue, and the **Cheat sheet** button
+in the panel header links back
+([notes repository](https://github.com/Franky100-pig/Stats-CheatSheet)).
+
+Every statistics knowledge point belongs in that repository — AP Statistics
+ones especially. This repository stays the calculator.
+
+---
+
 ## Use it in the browser
 
 `web/` builds a page that draws the handheld's front panel — chassis, screen,
